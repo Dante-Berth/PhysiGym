@@ -34,7 +34,7 @@ jobs:
 
     - name: install physicell
       run: |
-        git clone https://github.com/MathCancer/PhysiCell.git
+        git clone https://github.com/MathCancer/PhysiCell.git /home/runner/work/PhysiGym/PhysiCell
 
     - name: run the pytest
       run: |
