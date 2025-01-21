@@ -3,9 +3,9 @@ run-name: ${{ github.actor }}::test physigym on the windows msys2 os, all pytest
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main","patch030_workflow"]
   pull_request:
-    branches: ["main"]
+    branches: ["main","patch030_workflow"]
 
 jobs:
   build-windows:
