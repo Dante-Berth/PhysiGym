@@ -1,5 +1,5 @@
-name: physigym_linux_test_pilot
-run-name: ${{ github.actor }}::test physigym on linux os, all python3 versions, all unit tests.
+name: physigym_apple_test_pilot
+run-name: ${{ github.actor }}::test physigym on macosx, the macosx python3 versions, all unit tests.
 
 on:
   push:
@@ -8,8 +8,8 @@ on:
     branches: ["main","patch030_workflow"]
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  build-macosx:
+    runs-on: macos-latest
     strategy:
       fail-fast: false
 
@@ -27,16 +27,13 @@ jobs:
       with:
         python-version: '3.x'
 
-    - name: install python modules
+    - name: install python3 modules
       run: |
+        #brew install pipx
         python3 -m pip install --upgrade pip
         python3 -m pip install gymnasium lxml matplotlib numpy pandas pcdl pytest
-        which python3
-        which python
-        which pip3
-        which pip
 
-    - name: run the pytest
+    - name: run test tutorial
       run: |
         cd test/
         pytest
