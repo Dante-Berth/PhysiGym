@@ -24,9 +24,8 @@ import subprocess
 import shutil
 
 # const
-s_path_test = os.getcwd()
-s_path_physigym = '/'.join(s_path_test.replace('\\','/').split('/')[:-1])
-s_path_physicell = '/'.join(s_path_test.replace('\\','/').split('/')[:-2] + ['PhysiCell'])
+s_path_physigym = os.getcwd()
+s_path_physicell = '/'.join(s_path_physigym.replace('\\','/').split('/')[:-1] + ['PhysiCell'])
 
 
 # function

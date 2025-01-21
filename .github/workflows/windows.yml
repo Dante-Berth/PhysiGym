@@ -46,5 +46,4 @@ jobs:
     - name: run test tutorial
       shell: msys2 {0}
       run: |
-        cd test/
-        pytest test_physigym_model.py
+        pytest test/test_physigym_model.py
