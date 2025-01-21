@@ -18,11 +18,10 @@ jobs:
     - name: install physicell
       run: |
         git clone https://github.com/MathCancer/PhysiCell.git
-        git switch physigym
 
-    - name: install physigym
-      run: |
-        git clone https://github.com/Dante-Berth/PhysiGym.git
+    #- name: install physigym
+    #  run: |
+    #    git clone https://github.com/Dante-Berth/PhysiGym.git
 
     - name: check out physigym repo
       uses: actions/checkout@v4
