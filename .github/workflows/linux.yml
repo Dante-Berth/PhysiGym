@@ -17,7 +17,7 @@ jobs:
 
     - name: install physicell
       run: |
-        git clone https://github.com/MathCancer/PhysiCell
+        git clone https://github.com/MathCancer/PhysiCell.git
         git switch physigym
 
     - name: install physigym
