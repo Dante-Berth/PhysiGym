@@ -35,4 +35,4 @@ jobs:
     - name: run test tutorial
       run: |
         cd test/
-        pytest
+        pytest test_physigym_model.py

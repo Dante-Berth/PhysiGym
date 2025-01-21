@@ -1,0 +1,4 @@
+# physigym PhysiCell user_project templates
+# python physigym library
+# source code: https://github.com/Dante-Berth/PhysiGym
+__version__ = '0.3.0'

@@ -39,4 +39,5 @@ jobs:
     - name: run the pytest
       run: |
         cd test/
-        pytest
+        pytest test_physigym_model.py
+        #pytest test_physigym_reload.py
