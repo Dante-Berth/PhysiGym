@@ -15,6 +15,14 @@ jobs:
 
     steps:
 
+    - name: install gcc
+      run : |
+        if ! brew list gcc@13 &>/dev/null; then
+          brew install gcc@13
+        else
+          echo "gcc@13 is already installed."
+        fi
+
     - name: check out the physigym repo
       uses: actions/checkout@v4
 
@@ -34,4 +42,4 @@ jobs:
 
     - name: run test tutorial
       run: |
-        pytest test/test_physigym_model.py
+        pytest test/test_physigym_model.py -v
