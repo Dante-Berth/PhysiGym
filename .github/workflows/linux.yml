@@ -3,9 +3,9 @@ run-name: ${{ github.actor }}::test physigym on the linux os, all pytest unit te
 
 on:
   push:
-    branches: ["main","patch030_workflow"]
+    branches: ["main"] # "patch030_workflow"
   pull_request:
-    branches: ["main","patch030_workflow"]
+    branches: ["main"] # "patch030_workflow"
 
 jobs:
   build-linux:
@@ -38,5 +38,5 @@ jobs:
 
     - name: run the pytest
       run: |
-        pytest test/test_physigym_model.py
+        pytest test/test_physigym_model.py -v
         #pytest test/test_physigym_reload.py
