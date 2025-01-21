@@ -34,7 +34,7 @@ jobs:
     - name: install python modules
       run: |
         python3 -m pip install --upgrade pip
-        python3 -m pip install gymnasium, lxml, matplotlib, numpy, pandas, pcdl
+        python3 -m pip install gymnasium lxml matplotlib numpy pandas pcdl
         which python3
         which python
         which pip3
