@@ -15,10 +15,6 @@ jobs:
 
     steps:
 
-    - name: install physicell
-      run: |
-        git clone https://github.com/MathCancer/PhysiCell.git
-
     - name: check out the physigym repo
       uses: actions/checkout@v4
 
@@ -31,6 +27,10 @@ jobs:
       run: |
         python3 -m pip install --upgrade pip
         python3 -m pip install pytest gymnasium lxml matplotlib numpy pandas #pcdl
+
+    - name: install physicell
+      run: |
+        git clone https://github.com/MathCancer/PhysiCell.git /Users/runner/work/PhysiGym/PhysiCell
 
     - name: run test tutorial
       run: |
