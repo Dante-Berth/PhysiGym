@@ -1,5 +1,5 @@
 name: physigym_apple_test_pilot
-run-name: ${{ github.actor }}::test physigym on macosx, the macosx python3 versions, all unit tests.
+run-name: ${{ github.actor }}::test physigym on macosx, all pytest unit tests.
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
       run: |
         #brew install pipx
         python3 -m pip install --upgrade pip
-        python3 -m pip install gymnasium lxml matplotlib numpy pandas pcdl pytest
+        python3 -m pip install gymnasium lxml matplotlib numpy pandas pytest  # pcdl
 
     - name: run test tutorial
       run: |
