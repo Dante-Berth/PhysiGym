@@ -42,5 +42,5 @@ jobs:
 
     - name: run the pytest
       run: |
-        cd PhysiGym/test
+        cd test/
         pytest
