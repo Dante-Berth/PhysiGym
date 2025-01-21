@@ -3,9 +3,9 @@ run-name: ${{ github.actor }}::test physigym on the macosx, all pytest unit test
 
 on:
   push:
-    branches: ["main","patch030_workflow"]
+    branches: []
   pull_request:
-    branches: ["main","patch030_workflow"]
+    branches: []
 
 jobs:
   build-macosx:
