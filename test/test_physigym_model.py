@@ -39,12 +39,14 @@ class TestPhysigymTemplate(object):
         s_result = subprocess.run(['python3', 'install_physigym.py', 'template', '-f'], check=False, capture_output=True)
         os.chdir(s_path_physicell)
         shutil.rmtree('output/', ignore_errors=True)
-        if (platform.system() == 'Darwin'):
+        if (platform.system().lower() == 'darwin'):
             s_result = subprocess.run(['make', 'PHYSICELL_CPP=g++-13', 'static'], check=False, capture_output=True)
             print('\n',s_result)
         s_result = subprocess.run(['make', 'data-cleanup', 'clean', 'reset'], check=False, capture_output=True)
         print('\n',s_result)
         s_result = subprocess.run(['make', 'load', 'PROJ=physigym_template'], check=False, capture_output=True)
+        print('\n',s_result)
+        s_result = subprocess.run(['pip3', 'install', '--force-reinstall', 'custom_modules/physigym'], check=False, capture_output=True)
         print('\n',s_result)
         #s_result = subprocess.run(['sed', '-ie ', r's/<max_time units="min">[0-9.]*<\/max_time>/<max_time units="min">1440.0<\/max_time>/g', 'config/PhysiCell_settings.xml'], check=False, capture_output=True)
         #print('\n',s_result)
@@ -65,12 +67,14 @@ class TestPhysigymTemplate(object):
         os.chdir(s_path_physicell)
         shutil.copy(src='user_projects/physigym_template/run_physigym_template_episodes.py', dst=s_path_physicell)
         shutil.rmtree('output/', ignore_errors=True)
-        if (platform.system() == 'Darwin'):
+        if (platform.system().lower() == 'darwin'):
             s_result = subprocess.run(['make', 'PHYSICELL_CPP=g++-13', 'static'], check=False, capture_output=True)
             print('\n',s_result)
         s_result = subprocess.run(['make', 'data-cleanup', 'clean', 'reset'], check=False, capture_output=True)
         print('\n',s_result)
         s_result = subprocess.run(['make', 'load', 'PROJ=physigym_template'], check=False, capture_output=True)
+        s_result = subprocess.run(['pip3', 'install', '--force-reinstall', 'custom_modules/physigym'], check=False, capture_output=True)
+        print('\n',s_result)
         #s_result = subprocess.run(['sed', '-ie ', r's/<max_time units="min">[0-9.]*<\/max_time>/<max_time units="min">1440.0<\/max_time>/g', 'config/PhysiCell_settings.xml'], check=False, capture_output=True)
         #print('\n',s_result)
         s_result = subprocess.run(['make'], check=False, capture_output=True)
@@ -91,11 +95,12 @@ class TestPhysigymTutorial(object):
         s_result = subprocess.run(['python3', 'install_physigym.py', 'tutorial', '-f'], check=False, capture_output=True)
         os.chdir(s_path_physicell)
         shutil.rmtree('output/', ignore_errors=True)
-        if (platform.system() == 'Darwin'):
+        if (platform.system().lower() == 'darwin'):
             s_result = subprocess.run(['make', 'PHYSICELL_CPP=g++-13', 'static'], check=False, capture_output=True)
             print('\n',s_result)
         s_result = subprocess.run(['make', 'data-cleanup', 'clean', 'reset'], check=False, capture_output=True)
         s_result = subprocess.run(['make', 'load', 'PROJ=physigym_tutorial'], check=False, capture_output=True)
+        s_result = subprocess.run(['pip3', 'install', '--force-reinstall', 'custom_modules/physigym'], check=False, capture_output=True)
         #s_result = subprocess.run(['sed', '-ie ', r's/<max_time units="min">[0-9.]*<\/max_time>/<max_time units="min">1440.0<\/max_time>/g', 'config/PhysiCell_settings.xml'], check=False, capture_output=True)
         s_result = subprocess.run(['make', 'classic','-j8'], check=False, capture_output=True)
         s_result = subprocess.run(['./project'], check=False, capture_output=True)
@@ -113,11 +118,12 @@ class TestPhysigymTutorial(object):
         os.chdir(s_path_physicell)
         shutil.copy(src='user_projects/physigym_tutorial/run_physigym_tutorial_episodes.py', dst=s_path_physicell)
         shutil.rmtree('output/', ignore_errors=True)
-        if (platform.system() == 'Darwin'):
+        if (platform.system().lower() == 'darwin'):
             s_result = subprocess.run(['make', 'PHYSICELL_CPP=g++-13', 'static'], check=False, capture_output=True)
             print('\n',s_result)
         s_result = subprocess.run(['make', 'data-cleanup', 'clean', 'reset'], check=False, capture_output=True)
         s_result = subprocess.run(['make', 'load', 'PROJ=physigym_tutorial'], check=False, capture_output=True)
+        s_result = subprocess.run(['pip3', 'install', '--force-reinstall', 'custom_modules/physigym'], check=False, capture_output=True)
         #s_result = subprocess.run(['sed', '-ie ', r's/<max_time units="min">[0-9.]*<\/max_time>/<max_time units="min">1440.0<\/max_time>/g', 'config/PhysiCell_settings.xml'], check=False, capture_output=True)
         s_result = subprocess.run(['make'], check=False, capture_output=True)
         s_result = subprocess.run(['python3','run_physigym_tutorial_episodes.py'], check=False, capture_output=True)
@@ -136,11 +142,12 @@ class TestPhysigymEpisode(object):
         s_result = subprocess.run(['python3', 'install_physigym.py', 'episode', '-f'], check=False, capture_output=True)
         os.chdir(s_path_physicell)
         shutil.rmtree('output/', ignore_errors=True)
-        if (platform.system() == 'Darwin'):
+        if (platform.system().lower() == 'darwin'):
             s_result = subprocess.run(['make', 'PHYSICELL_CPP=g++-13', 'static'], check=False, capture_output=True)
             print('\n',s_result)
         s_result = subprocess.run(['make', 'data-cleanup', 'clean', 'reset'], check=False, capture_output=True)
         s_result = subprocess.run(['make', 'load', 'PROJ=physigym_episode'], check=False, capture_output=True)
+        s_result = subprocess.run(['pip3', 'install', '--force-reinstall', 'custom_modules/physigym'], check=False, capture_output=True)
         #s_result = subprocess.run(['sed', '-ie ', r's/<max_time units="min">[0-9.]*<\/max_time>/<max_time units="min">1440.0<\/max_time>/g', 'config/PhysiCell_settings.xml'], check=False, capture_output=True)
         s_result = subprocess.run(['make', 'classic','-j8'], check=False, capture_output=True)
         s_result = subprocess.run(['./project'], check=False, capture_output=True)
@@ -158,11 +165,12 @@ class TestPhysigymEpisode(object):
         os.chdir(s_path_physicell)
         shutil.copy(src='user_projects/physigym_episode/run_physigym_episode_episodes.py', dst=s_path_physicell)
         shutil.rmtree('output/', ignore_errors=True)
-        if (platform.system() == 'Darwin'):
+        if (platform.system().lower() == 'darwin'):
             s_result = subprocess.run(['make', 'PHYSICELL_CPP=g++-13', 'static'], check=False, capture_output=True)
             print('\n',s_result)
         s_result = subprocess.run(['make', 'data-cleanup', 'clean', 'reset'], check=False, capture_output=True)
         s_result = subprocess.run(['make', 'load', 'PROJ=physigym_episode'], check=False, capture_output=True)
+        s_result = subprocess.run(['pip3', 'install', '--force-reinstall', 'custom_modules/physigym'], check=False, capture_output=True)
         #s_result = subprocess.run(['sed', '-ie ', r's/<max_time units="min">[0-9.]*<\/max_time>/<max_time units="min">1440.0<\/max_time>/g', 'config/PhysiCell_settings.xml'], check=False, capture_output=True)
         s_result = subprocess.run(['make'], check=False, capture_output=True)
         s_result = subprocess.run(['python3','run_physigym_episode_episodes.py'], check=False, capture_output=True)

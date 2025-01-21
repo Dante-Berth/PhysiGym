@@ -22,7 +22,7 @@ cd ../PhysiCell
 make clean data-cleanup reset
 make list-user-projects
 make load PROJ=physigym_template
-pip install --force-reinstall custom_modules/physigym   # optional to install and update dependencies
+pip3 install --force-reinstall custom_modules/physigym   # optional to install and update dependencies
 make
 ```
 
