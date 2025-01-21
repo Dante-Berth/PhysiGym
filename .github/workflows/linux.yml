@@ -1,5 +1,5 @@
 name: physigym_linux_test_pilot
-run-name: ${{ github.actor }}::test physigym on linux os, all python3 versions, all unit tests.
+run-name: ${{ github.actor }}::test physigym on the linux os, all pytest unit tests.
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
       run: |
         git clone https://github.com/MathCancer/PhysiCell.git
 
-    - name: check out physigym repo
+    - name: check out the physigym repo
       uses: actions/checkout@v4
 
     - name: install python3
@@ -30,7 +30,7 @@ jobs:
     - name: install python modules
       run: |
         python3 -m pip install --upgrade pip
-        python3 -m pip install gymnasium lxml matplotlib numpy pandas pcdl pytest
+        python3 -m pip install pytest gymnasium lxml matplotlib numpy pandas pcdl
         which python3
         which python
         which pip3
