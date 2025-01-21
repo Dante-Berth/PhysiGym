@@ -31,7 +31,7 @@ jobs:
       run: |
         # brew install pipx
         python3 -m pip install --upgrade pip
-        python3 -m pip install pytest gymnasium lxml matplotlib numpy pandas #pcdl
+        python3 -m pipx install pytest gymnasium lxml matplotlib numpy pandas pcdl
 
     - name: run test tutorial
       run: |

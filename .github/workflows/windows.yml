@@ -41,7 +41,7 @@ jobs:
     - name: install python3 modules
       run: |
         python -m pip install --upgrade pip
-        python -m pip install pytest gymnasium lxml matplotlib numpy pandas pcdl
+        python -m pipx install pytest gymnasium lxml matplotlib numpy pandas pcdl
 
     - name: run test tutorial
       shell: msys2 {0}
