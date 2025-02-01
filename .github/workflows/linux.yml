@@ -15,6 +15,11 @@ jobs:
 
     steps:
 
+    - name: install missing linux packaes
+      run: |
+          sudo apt update
+          sudo apt install libxml2-dev libxslt1-dev
+
     - name: check out the physigym repo
       uses: actions/checkout@v4
 
