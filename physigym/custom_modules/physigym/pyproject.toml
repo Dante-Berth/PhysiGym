@@ -27,7 +27,7 @@ license = "BSD-3-Clause"
 dependencies = [
     "gymnasium",
     "ipython",
-    "lxml>5.0",
+    "lxml",
     "matplotlib",
     "numpy",
     "pandas",
