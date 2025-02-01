@@ -18,7 +18,7 @@ jobs:
     - name: install missing linux packaes
       run: |
           sudo apt update
-          sudo apt install libxml2-dev libxslt1-dev python-dev
+          sudo apt install libxml2-dev libxslt1-dev python3-dev
 
     - name: check out the physigym repo
       uses: actions/checkout@v4
