@@ -31,8 +31,7 @@ jobs:
     - name: install python modules
       run: |
         python3 -m pip install --upgrade pip
-        python3 -m pip install pytest gymnasium "lxml>5.0" matplotlib numpy pandas pcdl
-        python3 -m pip install -U aicsimageio
+        python3 -m pip install pytest gymnasium "lxml>5.0" matplotlib numpy pandas pcdl "aicsimageio>=4.14"
         which python3
         which python
         which pip3
