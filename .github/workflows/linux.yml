@@ -32,6 +32,7 @@ jobs:
       run: |
         python3 -m pip install --upgrade pip
         python3 -m pip install pytest gymnasium "lxml>5.0" matplotlib numpy pandas pcdl
+        python3 -m pip install -U aicsimageio
         which python3
         which python
         which pip3
