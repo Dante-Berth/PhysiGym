@@ -94,8 +94,20 @@ def wrap_env_with_rescale_stats_autoreset(env: gym.Env, min_action:float=-1, max
     env = gym.wrappers.Autoreset(env)
     return env
 
-def wrap_gray_env_image(env,resize_shape=(138,138), stack_size=2):
-    env = gym.wrappers.ResizeObservation(env,resize_shape)
-    env = gym.wrappers.GrayscaleObservation(env)
+def wrap_gray_env_image(env,resize_shape=(None,None), stack_size=2, gray=True):
+    if resize_shape != (None, None):
+        env = gym.wrappers.ResizeObservation(env,resize_shape)
+    if gray:
+        env = gym.wrappers.GrayscaleObservation(env)
+    class UInt8Wrapper(gym.ObservationWrapper):
+        def observation(self, obs):
+            return obs.astype(np.uint8)
+    
+    env = UInt8Wrapper(env)
+    print(env.observation_space.shape)
+
     env = gym.wrappers.FrameStackObservation(env, stack_size=stack_size)
+    if not gray:
+        C,H,W,S = env.observation_space.shape
+        env = gym.wrappers.ReshapeObservation(env, shape=(C*S, H, W))
     return env
