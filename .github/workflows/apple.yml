@@ -22,17 +22,7 @@ jobs:
         else
           echo "gcc@14 is already installed."
         fi
-        make PHYSICELL_CPP=g++-14 static
-
-    - name: Build ${{ matrix.projects.name }} project
-      run: |
-        export MACOSX_DEPLOYMENT_TARGET=13
-        make ${{ matrix.projects.project }}
-        make clean
-        ${{ matrix.projects.extra_run }}
-        make PHYSICELL_CPP=g++-13 static
-        cp ${{ matrix.projects.binary }} ${{ matrix.projects.binary }}_macos13
-
+        echo export PHYSICELL_CPP=g++-14 >> ~/.zshenv
 
     - name: check out the physigym repo
       uses: actions/checkout@v4
