@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: ["main"]
 
+env:
+  PHYSICELL_CPP: g++-14
+
 jobs:
   build-macosx:
     runs-on: macos-latest
@@ -22,7 +25,6 @@ jobs:
         else
           echo "gcc@14 is already installed."
         fi
-        echo export PHYSICELL_CPP=g++-14 >> ~/.zshenv
 
     - name: check out the physigym repo
       uses: actions/checkout@v4
