@@ -44,8 +44,8 @@ endif
 # compile the project
 
 all: main.cpp
-	pip install --force-reinstall custom_modules/embedding
-	pip install --force-reinstall --no-deps --editable custom_modules/physigym
+	pip3 install --force-reinstall custom_modules/embedding
+	pip3 install --force-reinstall --no-deps --editable custom_modules/physigym
 	make python-instruction
 
 python-instruction:
@@ -232,9 +232,9 @@ reset:
 	cp ./sample_projects/template/config/PhysiCell_settings.xml ./config/PhysiCell_settings.xml
 
 clean:
-	pip uninstall -y embedding
-	pip uninstall -y physigym
-	pip uninstall -y UNKNOWN
+	pip3 uninstall -y embedding
+	pip3 uninstall -y physigym
+	pip3 uninstall -y UNKNOWN
 	rm -fr ./custom_modules/embedding/build
 	rm -fr ./custom_modules/embedding/custom_modules
 	rm -fr ./custom_modules/embedding/embedding.egg-info

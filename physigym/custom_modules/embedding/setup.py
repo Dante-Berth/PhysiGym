@@ -13,11 +13,50 @@
 #####
 
 
+import os
+import platform
 from setuptools import Extension, setup
+import sys
 
 # extract the version number from the VERSION.txt file
 exec(open('./VERSION.txt').read())
 
+
+# set compile and linker arguments
+ls_extra_compile_args=[  # straight outta PhysiCell Makefile
+    "-march=native",  # ARCH
+    "-O3",  # CFLAG
+    "-fomit-frame-pointer",  # CFLAG
+    "-mfpmath=both",  # CFLAG
+    "-fopenmp",  # CFLAG
+    "-m64",  # CFLAG
+    "-std=c++11",  # CFLAG
+    #"-g",  # gdb
+]
+
+ls_extra_link_args=[  # straight outta PhysiCell Makefile
+    "-lgomp",  # needed for openmp
+]
+
+
+# set operating system specific manuipulations
+if (platform.system().lower() == 'linux'):  # linux
+    pass
+
+elif (platform.system().lower() == 'windows'):  # windows
+    pass
+
+elif (platform.system().lower() == 'darwin'):  # apple
+    os.environ["CC"] = os.environ["PHYSICELL_CPP"]
+    os.environ["CXX"] = os.environ["PHYSICELL_CPP"]
+    if (platform.machine().lower() == 'arm64'):  # M chipset
+        ls_extra_compile_args.pop(ls_extra_compile_args.index('-mfpmath=both'))
+
+else:
+    sys.exit(f'Error: unknowen operating system {platform.system()}!')
+
+
+# off we go!
 setup(
     # version
     version=__version__,
@@ -72,20 +111,9 @@ setup(
                 #"pugixml.cpp",
             ],
 
-            extra_compile_args=[  # straight outta PhysiCell Makefile
-                "-march=native",  # ARCH
-                "-O3",  # CFLAG
-                "-fomit-frame-pointer",  # CFLAG
-                "-mfpmath=both",  # CFLAG
-                "-fopenmp",  # CFLAG
-                "-m64",  # CFLAG
-                "-std=c++11",  # CFLAG
-                #"-g",  # gdb
-            ],
+            extra_compile_args = ls_extra_compile_args,
 
-            extra_link_args=[  # needed for openmp
-                "-lgomp",
-            ],
+            extra_link_args = ls_extra_link_args,
         ),
     ],
 )

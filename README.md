@@ -26,14 +26,14 @@ More precisely, [PhysiCell](https://github.com/MathCancer/PhysiCell) is an agent
 
 [Gymnasium](https://gymnasium.farama.org/main/) is the API standard for reinforcement learning, written in [Python](https://en.wikipedia.org/wiki/Python_(programming_language)).
 
-The Python-based physigym module presented here was written on top of the python_with_physicell [embedding](https://github.com/elmbeech/physicellembedding) module, which makes it possible to interact with PhysiCell models in the Python language.
+The Python-based physigym module presented here was written on top of the python_with_physicell extend module from the [physicellembedding](https://github.com/elmbeech/physicellembedding) project, which makes it possible to extend the python interpreter to interact with PhysiCell models in the Python language.
 
-Both, physigym and embedding, are PhysiCell custom_modules.
+Both, physigym and extend, are PhysiCell custom_modules.
 
 Walking through the [tutorial](https://github.com/Dante-Berth/PhysiGym/blob/main/man/TUTORIAL_physigym.md), you will gain the understanding needed to tackle more complex PhysiCell-based reinforcement learning projects.
 You will set up a very basic template model that can figure as a starting point for your own project.
 
-**Limitations:** Because of the way how PhysiCell is implemented and run, it is not possible to generate more than one PhysiCell Gymnasium environment per runtime. A runtime warning will be thrown if you try to do so!
+**Limitations:** Because of the way how PhysiCell is implemented and run, it is not possible to generate more than one PhysiCell Gymnasium environment per runtime. A runtime warning will be thrown if you try to do so.
 
 May the force be with you!
 
@@ -84,8 +84,9 @@ To be BibTeX.
 
 # Road Map:
 
-+ Test drive physigym on apple's mac osx.
-+ Test drive physigym on ms's windows os.
++ test drive physigym on apple's mac osx.
++ test drive physigym on ms's windows os.
++ add rl part.
 
 
 # Release Notes:
