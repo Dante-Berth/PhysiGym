@@ -35,6 +35,8 @@ You will set up a very basic template model that can figure as a starting point 
 
 **Limitations:** Because of the way how PhysiCell is implemented and run, it is not possible to generate more than one PhysiCell Gymnasium environment per runtime. A runtime warning will be thrown if you try to do so.
 
+**Operating systems:** physigym compiles on Linux, Windows Subsystem for Linux, and Mac OS X.
+
 May the force be with you!
 
 

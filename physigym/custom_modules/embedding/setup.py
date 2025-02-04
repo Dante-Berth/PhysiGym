@@ -44,7 +44,7 @@ if (platform.system().lower() == 'linux'):  # linux
     pass
 
 elif (platform.system().lower() == 'windows'):  # windows
-    pass
+    sys.exity(f'Error: We are sorry, physigym does not compile on the native {platform.system()} operating system. However, physigym will compile on the Windows Subsystem for Linux! Give it a try!')
 
 elif (platform.system().lower() == 'darwin'):  # apple
     os.environ["CC"] = os.environ["PHYSICELL_CPP"]
