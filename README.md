@@ -11,7 +11,7 @@ git push --tag
 + Language: C++11 and Python [>= 3.9](https://devguide.python.org/versions/)
 + Software dependencies: PhysiCell >= v1.14.2
 + Python library dependencies: gymnasium, lxml, matplotlib, numpy, pandas, (ipython, PyQt6)
-+ Operating system: compiles on Linux, Windows Subsystem for Linux, and Mac OS X.
++ Operating system dependencies: compiles on Linux, Windows Subsystem for Linux, and Mac OS X.
 + Author: Alexandre Bertin, Elmar Bucher
 + Date: 2024-spring
 + Doi:
