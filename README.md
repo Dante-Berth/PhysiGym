@@ -11,6 +11,7 @@ git push --tag
 + Language: C++11 and Python [>= 3.9](https://devguide.python.org/versions/)
 + Software dependencies: PhysiCell >= v1.14.2
 + Python library dependencies: gymnasium, lxml, matplotlib, numpy, pandas, (ipython, PyQt6)
++ Operating systems: compiles on Linux, Windows Subsystem for Linux, and Mac OS X.
 + Author: Alexandre Bertin, Elmar Bucher
 + Date: 2024-spring
 + Doi:
@@ -34,8 +35,6 @@ Walking through the [tutorial](https://github.com/Dante-Berth/PhysiGym/blob/main
 You will set up a very basic template model that can figure as a starting point for your own project.
 
 **Limitations:** Because of the way how PhysiCell is implemented and run, it is not possible to generate more than one PhysiCell Gymnasium environment per runtime. A runtime warning will be thrown if you try to do so.
-
-**Operating systems:** physigym compiles on Linux, Windows Subsystem for Linux, and Mac OS X.
 
 May the force be with you!
 
