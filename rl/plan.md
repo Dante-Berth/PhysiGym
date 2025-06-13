@@ -297,17 +297,9 @@ r_t = \gamma \cdot \left(e^{-C_t / 100} - e^{-C_{t-1} / 100}\right) - \alpha \cd
 
 ---
 
-### 3. **Relative Shrinkage Speed + Drug Penalty**
-
-```math
-r_t = \gamma \cdot \frac{\max(0, C_{t-1} - C_t)}{C_{t-1} + 1} - \alpha \cdot d_t
-```
-
-- Prioritizes *percentage*-based shrinkage  
-- Prevents division by zero with \( +1 \)
 
 ---
-### 4. **Weighted Linear Tumor Shrinkage - Drug Penalty**
+### 3. **Weighted Linear Tumor Shrinkage - Drug Penalty**
 
 ```math
 r_t = \alpha \cdot \frac{C_{t-1} - C_t}{\log(C_{t-1}+1)} - (1-\alpha) \cdot d_t
@@ -315,7 +307,7 @@ r_t = \alpha \cdot \frac{C_{t-1} - C_t}{\log(C_{t-1}+1)} - (1-\alpha) \cdot d_t
 
 - Encourages weighted reduction in tumor size 
 
-### 5. **Relative Tumor Shrinkage - Drug Penalty**
+### 4. **Relative Tumor Shrinkage - Drug Penalty**
 
 ```math
 r_t = \alpha \cdot \frac{C_{t-1} - C_t}{C_{t-1}} - (1-\alpha) \cdot d_t
@@ -325,6 +317,108 @@ r_t = \alpha \cdot \frac{C_{t-1} - C_t}{C_{t-1}} - (1-\alpha) \cdot d_t
  - [x] Launched with Weighted Linear Tumor Shrinkage - Drug Penalty (almost great)
  - [x] Launched with Relative Tumor Shrinkage - Drug Penalty (not great)
  - [x] rename variables from M1, M2, pro-inflammatory factor, anti-inflammatory factor to cell_1, cell_2, anti-tumoral factor, pro-tumoral factor 
- - [In progress] Tutorial
+ - [x] Tutorial
 # To do
 Goes to 2 June
+
+## 📘 Reward Functions
+
+Let:
+
+- $C_t$: number of cancer cells  
+- $d_t$: quantity of administered drug  
+- $d_t \in [0, 1]$  
+- $C_t \in [0, 700]$
+
+---
+
+### Reward Function $r_1$ **Sparse Tumor Shrinkage - Drug Penalty**
+
+$r_1(t) = -d_t + \mathbb{1}_{C_{t-1}=0} \cdot \beta$
+
+$\sum_{t=0}^{T} \gamma^t r_1(t) = -\sum_{t=0}^{T} \gamma^t d_t + \beta \sum_{t=0}^{T} \gamma^t \mathbb{1}_{C_{t-1}=0}$
+
+Assume:
+- $d_t = 0.5$
+- $\beta$ is constant
+
+Then:
+
+$\sum_{t=0}^{T} \gamma^t r_1(t) = -\frac{1}{2} \sum_{t=0}^{T} \gamma^t + \beta \sum_{t=0}^{T} \gamma^t$
+
+$= -\frac{1}{2} \cdot \frac{1 - \gamma^{T+1}}{1 - \gamma} + \beta \cdot \frac{1 - \gamma^{T+1}}{1 - \gamma}$
+
+---
+
+### Numerical Example
+
+Let $\gamma = 0.99 \Rightarrow 1 - \gamma = 0.01$, and $T \in [100, 200]$
+
+Then:
+
+$\gamma^T \in [0.134, 0.366] \Rightarrow \frac{\gamma^T - 1}{2(1 - \gamma)} \in [-43.3, -31.695]$
+
+We want to find a $\beta$ of the same order of magnitude:
+
+$\frac{\gamma^T - 1}{2(1 - \gamma)} + \frac{1}{\gamma^T} \in [-323, -86] \Rightarrow \beta \in [86, 323] \Rightarrow \text{Order of magnitude: } \mathcal{O}\left( \frac{2}{\gamma^T} \right)$
+
+Assume $\beta = 100$ points.
+
+If $d_t$ changes, then:
+
+$[-323, -86] \times \frac{2}{\bar{d}_t}$
+
+Where $\bar{d}_t$ is the mean quantity of drug administered under a random policy.
+
+$\left( \frac{1 - \frac{1}{\gamma^T}}{1 - \gamma} \right) \cdot \frac{1}{d_t}$
+
+Must have the same order of magnitude as $\beta$.
+
+---
+
+## 📙 Reward Function $r_2$
+
+$r_2(t) = \frac{C_{t-1} - C_t}{\log(C_{t-1} + 1)} - d_t$
+
+**Notation:**
+
+$C_{t-1} - C_t = \Delta C_t, \quad C_{t-1} + 1 > 2 \quad \text{(since if } t = 0 \Rightarrow t = T)$
+
+- $\log(C_{t-1} + 1)$ represents tumor mass.
+- The difference depends on tumor size. For a tumor with 10,000 cells, a reduction of 3 cells is negligible compared to a tumor with 10 cells.
+
+$\Delta C_t \in [-10, 10], \quad \log(C_{t-1} + 1) \in [0.693, 6.55] \Rightarrow \text{gives an order of magnitude close to 1}$
+
+---
+
+### Reward Function $r_3$
+
+$r_3(t) = \frac{C_{t-1} - C_t}{C_{t-1}} - \beta d_t$
+
+If $\beta = 1$:
+
+$r_3(t) = \frac{\Delta C_t}{C_{t-1}} - d_t$
+
+We know relative variations are bounded by ±50%:
+
+- A tumor with 1 cell can be completely eliminated (100% reduction).
+- A larger tumor can be reduced by at most 50%.
+
+We must adjust for $C_{t-1}$, but this leads back to $r_2(t)$:
+
+$r_1(t) \geq 2 (C_{t-1} - C_t) - \beta d_t \quad \text{with } \beta = 1$
+
+$\Rightarrow = -2 \Delta C_t - \beta d_t$
+
+$\Rightarrow \Delta C_t \in [-10, 10]$
+
+$\Rightarrow \text{So } 2 = \frac{1}{10}$
+
+---
+
+## ✅ Conclusion
+
+For $r_1$, $r_2$, and $r_3$, the reward functions appear similar and not particularly difficult to manage.
+
+The main challenge lies in **choosing the right coefficients**.
+
