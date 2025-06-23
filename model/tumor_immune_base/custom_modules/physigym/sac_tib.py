@@ -837,7 +837,10 @@ def main():
         done = terminations or truncations
         cumulative_return += rewards
         discounted_cumulative_return += rewards * args.gamma
-        if args.observation_type == "simple":
+        if (
+            args.observation_type == "simple"
+            or args.observation_type == "image_cell_types"
+        ):
             rb.add(obs, actions, rewards, next_obs, done)
         else:
             rb.add(df_cell_obs, actions, rewards, next_df_cell_obs, done, type_to_int)
