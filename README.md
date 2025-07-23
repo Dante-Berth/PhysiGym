@@ -77,7 +77,7 @@ Within the PhysiGym library, we tried to stick to the documentation policy laid 
 + Concept and implementation: Alexandre Bertin, Elmar Bucher
 + Involved: Emmanuel Rachelson, Heber Lima da Rocha, Marcelo Hurtado, Owen Griere, Paul Macklin, Randy Heiland, Vera Pancaldi, Vincent François
 
-If you like to contribute to the software with models or rl algorithms, please make a pull request to the [development branch](https://github.com/elmbeech/PhysiGym/tree/development).
+If you like to contribute to the software with models or rl algorithms, please make a pull request to the [development branch](https://github.com/Dante-Berth/PhysiGym/tree/development).
 
 
 # Funding:
