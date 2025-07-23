@@ -3,9 +3,9 @@ run-name: ${{ github.actor }}::test physigym on the linux os, all pytest unit te
 
 on:
   push:
-    branches: ["utest"]  # main
-  #pull_request:
-  #  branches: ["main"]
+    branches: ["utest", "development"]  # main
+  pull_request:
+    branches: ["development"]
 
 jobs:
   build-linux:
