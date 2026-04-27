@@ -3,8 +3,10 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.neighbors import NearestNeighbors
 from math import sqrt
 from scipy.ndimage import gaussian_filter
+
 # ============================================================
 # Utils
 # ============================================================
@@ -84,15 +86,14 @@ def weighted_pick(arr, threshold, n=1):
 
     # normalize probabilities to sum to 1
     probs /= probs.sum()
-
     # weighted choice
-    idx = np.random.choice(len(coords), size=n, p=probs, replace=False)
+    idx = np.random.choice(len(coords), size=n, p=probs, replace=True)
 
     return coords[idx]
 
 
 def df_cells(x, y, cell_type):
-    return pd.DataFrame({"x": x, "y": y, "z": 0.0, "type": cell_type})
+    return pd.DataFrame({"x": x, "y": y, "z": 0, "type": cell_type})
 
 
 # ============================================================
@@ -165,11 +166,7 @@ def random_mode(params, bounds):
     nb_t_cell = params["T_cell"]["number_cells"]
 
     tumor = df_cells(
-        np.random.uniform(
-            bounds[0][0],
-            bounds[0][1],
-            nb_tumor_cells,
-        ),
+        np.random.uniform(bounds[0][0], bounds[0][1], nb_tumor_cells),
         np.random.uniform(bounds[1][0], bounds[1][1], nb_tumor_cells),
         "tumor",
     )
@@ -241,29 +238,18 @@ def rectangle_mode(params, bounds):
     return pd.concat([tumor, Macrophage, t_cell], ignore_index=True)
 
 
-def generate_synthetic_network_field(
-    params,
-    bounds,
-    amplitude=1,
-    save=False,
-):
+def generate_synthetic_network_field(params, bounds, amplitude=1, save=False):
     domain_size = int(bounds[0][1] - bounds[0][0]), int(bounds[1][1] - bounds[1][0])
-    # === Generate Fields ===
     fields = generate_balanced_fields(
-        domain_size=domain_size,
-        params=params,
-        amplitude=amplitude,
+        domain_size=domain_size, params=params, amplitude=amplitude
     )
-    xs_final = []
-    ys_final = []
-    phenotypes_final = []
+
+    xs_final, ys_final, phenotypes_final = [], [], []
     n_types = len(list(params.keys()))
     fig, axes = (
         plt.subplots(n_types, 2, figsize=(10, 5 * n_types)) if save else None,
         None,
     )
-
-    # Handle case of single row
     if n_types == 1:
         axes = np.array([axes])
 
@@ -275,14 +261,11 @@ def generate_synthetic_network_field(
         xs = coords[:, 0]
         ys = coords[:, 1]
         if save:
-            # ========== LEFT: FIELD ==========
             ax_field = axes[row_idx, 0]
             im = ax_field.imshow(field, cmap="viridis")
             ax_field.set_title(f"Field: {ct}")
             ax_field.axis("off")
             fig.colorbar(im, ax=ax_field, fraction=0.046, pad=0.04)
-
-            # ========== RIGHT: SCATTER CELLS ==========
             ax_scatter = axes[row_idx, 1]
             ax_scatter.scatter(ys, domain_size[1] - xs, s=10, alpha=0.8)
             ax_scatter.set_title(f"Cells: {ct}")
@@ -290,35 +273,30 @@ def generate_synthetic_network_field(
             ax_scatter.set_ylabel("Y")
             ax_scatter.set_aspect("equal")
 
-        xs_final.extend(xs)  # extend, not append
+        xs_final.extend(xs)
         ys_final.extend(ys)
-        phenotypes_final.extend([ct] * len(coords))  # repeat ct for each cell
+        phenotypes_final.extend([ct] * len(coords))
 
-    df_cells = pd.DataFrame(
-        data={
+    df_result = pd.DataFrame(
+        {
             "x": xs_final,
             "y": ys_final,
             "z": [0] * len(xs_final),
             "type": phenotypes_final,
         }
     )
-    df_cells[["x", "y"]] += bounds[0][0], bounds[1][0]
-    return df_cells
+    # Shift by bounds origin — cast to int to preserve integer dtype
+    df_result["x"] = (df_result["x"] + int(bounds[0][0])).astype(int)
+    df_result["y"] = (df_result["y"] + int(bounds[1][0])).astype(int)
+    return df_result
 
 
 # ============================================================
 # CSV + Plot
 # ============================================================
 def generate_initial_condition(
-    csv_path, mode, x_min, x_max, y_min, y_max, M2_fraction, params, seed=42
+    csv_path, mode, x_min, x_max, y_min, y_max, params, seed=42
 ):
-    if M2_fraction is None:
-        M2_fraction = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-    M2_fraction = (
-        np.random.choice(M2_fraction)
-        if isinstance(M2_fraction, (list, np.ndarray))
-        else M2_fraction
-    )
     set_seed(seed)
     bounds = ((x_min, x_max), (y_min, y_max))
     if isinstance(mode, (list, tuple)):
@@ -347,8 +325,18 @@ def generate_initial_condition(
     else:
         raise ValueError(mode)
 
-    df = df.drop_duplicates(subset=["x", "y"], keep=False)
-    df.to_csv(csv_path, index=False, float_format="%.6f")
+    # =========================================================================
+    # NEW LOGIC: Round to nearest whole number, cast to integer, drop overlaps
+    # =========================================================================
+    df["x"] = df["x"].round().astype(int)
+    df["y"] = df["y"].round().astype(int)
+
+    # Changed keep=False to keep='first' so that one cell remains if multiples
+    # land on the exact same (x, y) grid spot.
+    df = df.drop_duplicates(subset=["x", "y"], keep="first")
+
+    # No longer using float_format="%.6f" since they are pure integers
+    df.to_csv(csv_path, index=False)
     return df, mode
 
 
@@ -372,23 +360,22 @@ def plot_cells(df, path):
 if __name__ == "__main__":
     out = "configs_network_field"
     os.makedirs(out, exist_ok=True)
-    x_min, x_max, y_min, y_max = -256, 256, -256, 256
+    x_min, x_max, y_min, y_max = 0, 63, 0, 63
 
     modes = ["network_field"]
     params = {
-        "tumor": {"correlation_length": 35, "threshold": 0.55, "number_cells": 256},
+        "tumor": {"correlation_length": 35, "threshold": 0.55, "number_cells": 512},
         "Macrophage": {
             "correlation_length": 35,
             "threshold": 0.55,
-            "number_cells": 64,
+            "number_cells": 128,
         },
-        "T_cell": {"correlation_length": 35, "threshold": 0.55, "number_cells": 32},
+        "T_cell": {"correlation_length": 35, "threshold": 0.55, "number_cells": 42},
     }
 
     d_arg_generation = {
         "csv_path": None,
         "params": params,
-        "M2_fraction": None,
         "x_min": x_min,
         "x_max": x_max,
         "y_min": y_min,
@@ -398,7 +385,8 @@ if __name__ == "__main__":
     }
     seed = 42
     for i in range(1, 48):
-        d_arg_generation["csv_path"] = f"{out}/cells_{i}.png"
+        # Fixed csv_path extension from .png to .csv
+        d_arg_generation["csv_path"] = f"{out}/cells_{i}.csv"
         d_arg_generation["seed"] = seed
         d_arg_generation["mode"] = "network_field"
         d_arg_generation["params"] = {

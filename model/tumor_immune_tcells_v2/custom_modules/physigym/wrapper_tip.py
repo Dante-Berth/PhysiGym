@@ -151,7 +151,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
         }
 
         obs, r_cancer_cells, terminated, truncated, info = self.env.step(d_action)
-
         drug_prev = self.info["prev_mean_drugs"]
         drug_t = np.mean(action)
         info["action"] = d_action
@@ -296,7 +295,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
         self.save_data()
 
-        self.info = {"prev_mean_drugs": 0}
+        self.info = {"prev_mean_drugs": 0, "train_test": ""}
 
         # ---- IMPORTANT: forward seed, do not invent one ----
         return self.env.reset(seed=seed, options=options)
