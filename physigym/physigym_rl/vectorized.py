@@ -25,12 +25,11 @@ from tqdm import tqdm
 import multiprocessing as mp
 
 from resilient_sub_vec_env import ResilientSubprocVecEnv
-# from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
-from wrapper import PhysiCellModelWrapper 
-import sys
-import faulthandler
 
-faulthandler.enable(file=sys.stderr, all_threads=True)
+from wrapper_tip import (
+    PhysiCellModelWrapper,
+) 
+import sys
 import physigym
 from extending import physicell
 
@@ -141,27 +140,87 @@ def make_physigym_env(env_id: int, cfg: dict):
         env = gym.make(**model_cfg_copy)
         # Wrap it for simplified action and custom reward
         env = PhysiCellModelWrapper(env, **wrapper_cfg)
-
         generation_cfg["seed"] = int(rng.integers(0, 2**12 - 1)) + env_id
         env.reset(generation_cfg=generation_cfg)
-
         return env
 
     return _init
 
 
 def vec_envs(cfg: dict):
-    mp.set_start_method("spawn", force=True)
     vect_cfg = cfg["vectorization"]
     num_envs = vect_cfg["num_envs"]
-    rl_threads = vect_cfg["rl_threads"]# configure_thread_splitting(vect_cfg["rl_threads"])
+    rl_threads = vect_cfg[
+        "rl_threads"
+    ]  # configure_thread_splitting(vect_cfg["rl_threads"])
     threads_per_env = (psutil.cpu_count(logical=True) - rl_threads) // num_envs
     cfg["vectorization"]["threads_per_env"] = threads_per_env
     print(f"[INFO] Launching {num_envs} envs × {threads_per_env} threads each")
-
     env_fns = [make_physigym_env(i, cfg) for i in range(num_envs)]
+    return ResilientSubprocVecEnv(
+        env_fns=env_fns, start_method="spawn"
+    )  # SubprocVecEnv(env_fns=env_fns, start_method="spawn")
 
-    return ResilientSubprocVecEnv(env_fns=env_fns, start_method="spawn") #SubprocVecEnv(env_fns=env_fns, start_method="spawn")
+
+def test_make_physigym_env(cfg: dict, env_id=0):
+    assign_cpu_affinity(0, 4, offset_threads=2)
+    vect_cfg = cfg["vectorization"]
+    num_envs = vect_cfg["num_envs"]
+    rl_threads = vect_cfg[
+        "rl_threads"
+    ]  # configure_thread_splitting(vect_cfg["rl_threads"])
+    threads_per_env = (psutil.cpu_count(logical=True) - rl_threads) // num_envs
+    cfg["vectorization"]["threads_per_env"] = threads_per_env
+    print(f"[INFO] Launching {num_envs} envs × {threads_per_env} threads each")
+    sim_cfg = cfg["simulation"]
+    vect_cfg = cfg["vectorization"]
+    model_cfg = cfg["model"]
+    wrapper_cfg = cfg["wrapper"]
+    generation_cfg = cfg["generation"]
+
+    base_xml = model_cfg["settingxml"]
+    base_cells = model_cfg["settingcells"]
+    model_cfg_copy = model_cfg.copy()
+    threads_per_env = vect_cfg["threads_per_env"]
+    seed = sim_cfg["seed"]
+    master_seed = seed if seed is not None else 42
+    rng = np.random.default_rng(master_seed)
+    env_xml = f"config/PhysiCell_settings_env{env_id}.xml"
+    env_cells = f"config/cells_{env_id}.csv"
+    if not os.path.exists(env_xml):
+        shutil.copy(base_xml, env_xml)
+    if not os.path.exists(env_cells):
+        shutil.copy(base_cells, env_cells)
+    if model_cfg_copy["output_dir"] is None:
+        model_cfg_copy["output_dir"] = "output"
+    del model_cfg_copy["settingcells"]
+    rl_threads = vect_cfg["rl_threads"]
+    # Modify XML for this env
+    tree = etree.parse(env_xml)
+    root = tree.getroot()
+    root.xpath("//overall/max_time")[0].text = str(sim_cfg["max_time"])
+    root.xpath("//parallel/omp_num_threads")[0].text = str(threads_per_env)
+    root.xpath("//save/folder")[0].text = os.path.join(
+        model_cfg_copy["output_dir"], f"env{env_id}"
+    )
+    root.xpath("//save/full_data/enable")[0].text = "false"
+    root.xpath("//save/SVG/enable")[0].text = "false"
+    root.xpath("//initial_conditions/cell_positions/filename")[
+        0
+    ].text = f"cells_{env_id}.csv"
+    tree.write(env_xml, pretty_print=True)
+    model_cfg_copy["settingxml"] = env_xml
+
+    del model_cfg_copy["output_dir"]
+    # if env_id != 0:
+    #    wrapper_cfg["frequency_save_data"] = None
+    # Create the base PhysiCell environment
+    env = gym.make(**model_cfg_copy)
+    # Wrap it for simplified action and custom reward
+    env = PhysiCellModelWrapper(env, **wrapper_cfg)
+    generation_cfg["seed"] = int(rng.integers(0, 2**12 - 1)) + env_id
+    env.reset(generation_cfg=generation_cfg)
+    return env
 
 
 # ============================================================
@@ -202,15 +261,15 @@ def run_vectorized(cfg: dict):
             num_envs = envs.num_envs
         """
     envs.close()
-    return round(time.time() - time_1,2)
+    return round(time.time() - time_1, 2)
+
 
 # ============================================================
 # CLI
 # ============================================================
 if __name__ == "__main__":
-    import faulthandler
     import pandas as pd
-    faulthandler.enable(all_threads=True)
+
     parser = argparse.ArgumentParser(
         description="Vectorized PhysiCell runner with CPU pinning."
     )
@@ -245,7 +304,7 @@ if __name__ == "__main__":
             "settingcells": args.settingcells,
             "output_dir": "./new_wrapper_output_data",
             "figsize": (6, 6),
-            "observation_mode": "scalars_cells",  # "img_mc_cells_substrates",
+            "observation_mode": "img_mc_cells_substrates",  # "img_mc_cells_substrates",
             "render_mode": None,
             "verbose": False,
             "img_rgb_grid_size_x": 64,
@@ -256,9 +315,9 @@ if __name__ == "__main__":
         },
         "wrapper": {
             "list_variable_name": ["drug_1"],
-            "w_cell":0.7,
-            "w_increase":0.2,
-            "w_amount":0.1,
+            "w_cell": 0.7,
+            "w_increase": 0.2,
+            "w_amount": 0.1,
         },
         "generation": {
             "x_min": 0,
@@ -267,12 +326,11 @@ if __name__ == "__main__":
             "y_max": 64,
             "params": params,  # number of tumor cells for the initial state
             "seed": args.seed,  # seed
-            "mode_train":"network_field",
-            "mode_test":["rectangle", "circular","network_field"]
+            "mode_train": "network_field",
+            "mode_test": ["rectangle", "circular", "network_field"],
         },
-        "rl":{
-            "total_timesteps":25000
-        }
+        "rl": {"total_timesteps": 25000},
     }
+    env = test_make_physigym_env(cfg)
+    env.reset()
     run_vectorized(cfg)
-
