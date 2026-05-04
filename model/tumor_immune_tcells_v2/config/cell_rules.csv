@@ -1,7 +1,6 @@
 Macrophage,contact with tumor,decreases,migration speed,0.001,0.1,2,0
-tumor,damage,increases,apoptosis,0.005,1,2,0
 Macrophage,tumor_molecule,increases,pro-tumoral factor secretion,10,0.5,1,0
 Macrophage,drug_1,decreases,pro-tumoral factor secretion,0.,0.5,4,0
 Macrophage,drug_1,increases,anti-tumoral factor secretion,10,0.5,4,0
 Macrophage,tumor_molecule,decreases,anti-tumoral factor secretion,0,0.5,1,0
-tumor,contact with T_cell,increases,apoptosis,0.001,0.5,4,0
+tumor,contact with T_cell,increases,apoptosis,0.0025,0.5,4,0

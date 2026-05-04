@@ -3,7 +3,7 @@
 // derived from: PhyiCell/main.cpp
 //
 // language: C/C++
-// date: 2015-2024
+// date: 2015-2025
 // license: BSD-3-Clause
 // author: Alexandre Bertin, Elmar Bucher, Paul Macklin
 // original source code: https://github.com/MathCancer/PhysiCell
@@ -33,6 +33,9 @@
 #include <omp.h>
 #include <sys/stat.h>
 
+#include <fcntl.h>
+
+
 // loade PhysiCell library
 #include "../../core/PhysiCell.h"
 #include "../../modules/PhysiCell_standard_modules.h"
@@ -48,10 +51,55 @@ std::ofstream report_file;
 //std::vector<std::string> (*cell_coloring_function)(Cell*) = my_coloring_function;  // set a pathology coloring function
 //std::string (*substrate_coloring_function)(double, double, double) = paint_by_density_percentage;
 
-// function
+// Helper functions
+// exactly like in PhysiCell BUT 
+void modified_delete_cell(Cell* pDeleteMe) {
+    pDeleteMe->remove_all_attached_cells();
+    pDeleteMe->remove_all_spring_attachments();
+    pDeleteMe->remove_self_from_all_neighbors();
+    pDeleteMe->internalized_substrates->assign(pDeleteMe->internalized_substrates->size() , 0.0 );  // instead of pDeleteMe->release_internalized_substrates (BioFVM causing a core dumped)
+
+    // move last item to index and pop
+    (*all_cells)[ (*all_cells).size() - 1 ]->index = pDeleteMe->index;
+    (*all_cells)[pDeleteMe->index] = (*all_cells)[ (*all_cells).size() - 1 ];
+    all_cells->pop_back();
+
+    // deregister and delete
+    pDeleteMe->get_container()->remove_agent(pDeleteMe);
+    delete pDeleteMe;
+}
+
+// destroy all safely
+// destroy all safely
+void destroy_all_cells() {
+    // 1. The Clever Edge: Sever all graph relationships globally first.
+    // This prevents any cell from reaching into another cell's memory during deletion.
+    for (int i = 0; i < all_cells->size(); ++i) {
+        (*all_cells)[i]->state.neighbors.clear();
+        (*all_cells)[i]->state.attached_cells.clear();
+        (*all_cells)[i]->state.spring_attachments.clear();
+    }
+
+    // 2. Now safely delete them. 
+    // The remove_self_from_all_neighbors() will just see empty lists and safely do nothing.
+    for (int i = all_cells->size() - 1; i >= 0; --i) {
+        modified_delete_cell((*all_cells)[i]);
+    }
+}
+//
 
 // extended Python C++ function start
 static PyObject* physicell_start(PyObject *self, PyObject *args) {
+
+    // ===== SILENCE START =====
+    int stdout_fd = dup(STDOUT_FILENO);
+    int stderr_fd = dup(STDERR_FILENO);
+
+    int devnull = open("/dev/null", O_WRONLY);
+    dup2(devnull, STDOUT_FILENO);
+    dup2(devnull, STDERR_FILENO);
+    close(devnull);
+    // =========================
 
     // extract args take default if no args
     char *settingxml = "config/PhysiCell_settings.xml";
@@ -103,8 +151,7 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
         XML_status = read_PhysiCell_config_file(settingxml);
         if (XML_status) { PhysiCell_settings.read_from_pugixml(); }
         if (!XML_status) { exit(-1); }
-        //PhysiCell_settings.max_time = 1440 + (std::rand() % (10080 - 1440 + 1));
-        //PhysiCell_settings.max_time = 1440;
+        
         create_output_directory(PhysiCell_settings.folder);
 
         // OpenMP setup
@@ -112,30 +159,27 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
 
         // reset cells
         std::cout << "reset cells ..." << std::endl;
-        for (Cell* pCell: (*all_cells)) {
-            pCell->lyse_cell();
-            pCell->die();
-        }
+        destroy_all_cells();
+        
+        std::cout << "reset_max_basic_agent_ID ..." << std::endl;
         BioFVM::reset_max_basic_agent_ID();
 
         // reset mesh0
         std::cout << "reset mesh0 ..." << std::endl;
         BioFVM::reset_BioFVM_substrates_initialized_in_dom();
 
-        // reset microenvironment and mechanics voxel size and match the data structure to BioFVM
+        // reset microenvironment
         std::cout << "reset densities ..." << std::endl;
         set_microenvironment_initial_condition();
         microenvironment.display_information(std::cout);
-        double mechanics_voxel_size = 30;
-        Cell_Container* cell_container = create_cell_container_for_microenvironment(microenvironment, mechanics_voxel_size);
+
+        // ✅ REMOVED the create_cell_container_for_microenvironment lines!
+        // The old container is still there and perfectly empty.
 
         // reset tissue
         std::cout << "reset tissue ..." << std::endl;
         display_cell_definitions(std::cout);
-        setup_tissue();  // modify this in the custom code
-
-        // MultiCellDS save options
-        // have only to be set once per runtime
+        setup_tissue();  
     }
 
     // copy config file to output directory
@@ -191,6 +235,13 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
     BioFVM::RUNTIME_TIC();
     BioFVM::TIC();
 
+    // ===== RESTORE OUTPUT =====
+    dup2(stdout_fd, STDOUT_FILENO);
+    dup2(stderr_fd, STDERR_FILENO);
+    close(stdout_fd);
+    close(stderr_fd);
+    // ==========================
+
     // going home
     return PyLong_FromLong(0);
 }
@@ -198,6 +249,15 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
 
 // extended Python C++ function step
 static PyObject* physicell_step(PyObject *self, PyObject *args) {
+    // ===== SILENCE START =====
+    int stdout_fd = dup(STDOUT_FILENO);
+    int stderr_fd = dup(STDERR_FILENO);
+
+    int devnull = open("/dev/null", O_WRONLY);
+    dup2(devnull, STDOUT_FILENO);
+    dup2(devnull, STDERR_FILENO);
+    close(devnull);
+    // =========================
     // main loop
 
     // bue 2024-02-01: simplify (no try catch)
@@ -216,6 +276,11 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
         bool action = true;
         bool step = true;
         while (step) {
+            // run microenvironment
+            microenvironment.simulate_diffusion_decay(diffusion_dt);
+
+            // run PhysiCell
+            ((Cell_Container *)microenvironment.agent_container)->update_all_cells(PhysiCell_globals.current_time);
 
             // max time reached?
             if (PhysiCell_globals.current_time > PhysiCell_settings.max_time) {
@@ -226,7 +291,7 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
             if (action) {
 
                 // achtung : begin physigym specific implementation!
-                std::cout << "administer drug ... " << std::endl;
+                // std::cout << "administer drug ... " << std::endl;
                 add_substrate("drug_1", parameters.doubles("drug_1"));
                 action = false;
                 // achtung : end physigym specific implementation!
@@ -267,7 +332,7 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
 
                 // achtung : begin physigym specific implementation!
                 custom_countdown += parameters.doubles("dt_gym");  // [min]
-                std::cout << "processing gym time step observation block ... " << std::endl;
+                // std::cout << "processing gym time step observation block ... " << std::endl;
                 parameters.doubles("time") = PhysiCell_globals.current_time;
                 action = true;
                 step = false;
@@ -326,11 +391,6 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
             //std::cout << "processing diffusion time step observation block ... " << std::endl << std::endl;
             //step = false;
 
-            // run microenvironment
-            microenvironment.simulate_diffusion_decay(diffusion_dt);
-
-            // run PhysiCell
-            ((Cell_Container *)microenvironment.agent_container)->update_all_cells(PhysiCell_globals.current_time);
 
             // update time
             custom_countdown -= diffusion_dt;
@@ -371,6 +431,12 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
                 SVG_plot(filename, microenvironment, 0.0, PhysiCell_globals.current_time, cell_coloring_function, substrate_coloring_function);
             }
         }
+    // ===== RESTORE OUTPUT =====
+    dup2(stdout_fd, STDOUT_FILENO);
+    dup2(stderr_fd, STDERR_FILENO);
+    close(stdout_fd);
+    close(stderr_fd);
+    // ==========================
 
     //} catch (const std::exception& e) {  // reference to the base of a polymorphic object
     //    std::cout << e.what();  // information from length_error printed
@@ -394,10 +460,6 @@ static PyObject* physicell_stop(PyObject *self, PyObject *args) {
     sprintf(filename, "%s/final.svg", PhysiCell_settings.folder.c_str());
     SVG_plot(filename, microenvironment, 0.0, PhysiCell_globals.current_time, cell_coloring_function, substrate_coloring_function);
 
-    // timer
-    std::cout << std::endl << "Total simulation runtime: " << std::endl;
-    BioFVM::display_stopwatch_value(std::cout, BioFVM::runtime_stopwatch_value());
-    std::cout << std::endl;
 
     // save legacy simulation report
     if (PhysiCell_settings.enable_legacy_saves == true) {
@@ -720,116 +782,6 @@ static PyObject* physicell_get_microenv(PyObject *self, PyObject *args) {
     return pLlist;
 }
 
-static PyObject* physicell_get_graph(PyObject *self, PyObject *args) {
-    // extract variable label
-    const char *graph;
-    if (! PyArg_ParseTuple(args, "s", &graph)) {
-        return NULL;
-    }
-
-    // recall from C++ into Python variable
-
-    // graph neighbor
-    if (strcmp(graph, "neighbor") == 0) {
-        // edge count
-        int i_edge = (*all_cells).size();
-        for (int i=0 ; i < (*all_cells).size(); i++) {
-            i_edge += (*all_cells)[i]->state.neighbors.size();
-        }
-        PyObject *pLlist = PyList_New(i_edge);
-        // extract graph
-        int n = 0;
-        for (int i=0 ; i < (*all_cells).size(); ++i) {
-            int id_i = (*all_cells)[i]->ID;
-            PyObject *pList = PyList_New(2);
-            PyList_SetItem(pList, 0, PyLong_FromLong(id_i));
-            PyList_SetItem(pList, 1, PyLong_FromLong(id_i));
-            PyList_SetItem(pLlist, n, pList);
-            ++n;
-            int size_i = (*all_cells)[i]->state.neighbors.size();
-            for (int j=0 ; j < size_i; ++j) {
-                int id_j = (*all_cells)[i]->state.neighbors[j]->ID;
-                PyObject *pList = PyList_New(2);
-                PyList_SetItem(pList, 0, PyLong_FromLong(id_i));
-                PyList_SetItem(pList, 1, PyLong_FromLong(id_j));
-                PyList_SetItem(pLlist, n, pList);
-                ++n;
-            }
-        }
-        // going home
-        return pLlist;
-    }
-
-    // graph attached
-    else if (strcmp(graph, "attached") == 0) {
-        // edge count
-        int i_edge = (*all_cells).size();
-        for (int i=0 ; i < (*all_cells).size(); i++) {
-            i_edge += (*all_cells)[i]->state.attached_cells.size();
-        }
-        PyObject *pLlist = PyList_New(i_edge);
-        // extract graph
-        int n = 0;
-        for (int i=0 ; i < (*all_cells).size(); ++i) {
-            int id_i = (*all_cells)[i]->ID;
-            PyObject *pList = PyList_New(2);
-            PyList_SetItem(pList, 0, PyLong_FromLong(id_i));
-            PyList_SetItem(pList, 1, PyLong_FromLong(id_i));
-            PyList_SetItem(pLlist, n, pList);
-            ++n;
-            int size_i = (*all_cells)[i]->state.attached_cells.size();
-            for (int j=0 ; j < size_i; ++j) {
-                int id_j = (*all_cells)[i]->state.attached_cells[j]->ID;
-                PyObject *pList = PyList_New(2);
-                PyList_SetItem(pList, 0, PyLong_FromLong(id_i));
-                PyList_SetItem(pList, 1, PyLong_FromLong(id_j));
-                PyList_SetItem(pLlist, n, pList);
-                ++n;
-            }
-        }
-        // going home
-        return pLlist;
-    }
-
-    // graph spring attached
-    else if (strcmp(graph, "spring") == 0) {
-        // edge count
-        int i_edge = (*all_cells).size();
-        for (int i=0 ; i < (*all_cells).size(); i++) {
-            i_edge += (*all_cells)[i]->state.spring_attachments.size();
-        }
-        PyObject *pLlist = PyList_New(i_edge);
-        // extract graph
-        int n = 0;
-        for (int i=0 ; i < (*all_cells).size(); ++i) {
-            int id_i = (*all_cells)[i]->ID;
-            PyObject *pList = PyList_New(2);
-            PyList_SetItem(pList, 0, PyLong_FromLong(id_i));
-            PyList_SetItem(pList, 1, PyLong_FromLong(id_i));
-            PyList_SetItem(pLlist, n, pList);
-            ++n;
-            int size_i = (*all_cells)[i]->state.spring_attachments.size();
-            for (int j=0 ; j < size_i; ++j) {
-                int id_j = (*all_cells)[i]->state.spring_attachments[j]->ID;
-                PyObject *pList = PyList_New(2);
-                PyList_SetItem(pList, 0, PyLong_FromLong(id_i));
-                PyList_SetItem(pList, 1, PyLong_FromLong(id_j));
-                PyList_SetItem(pLlist, n, pList);
-                ++n;
-            }
-        }
-        // going home
-        return pLlist;
-    }
-
-    // error handling
-    else {
-        char error[1024];
-        snprintf(error, sizeof(error), "Error: unknown graph type (known are neighbor, attached, spring)! %s", graph);
-        PyErr_SetString(PyExc_KeyError, error);
-        return NULL;
-    }
-}
 
 // extended Python C++ function system
 static PyObject* physicell_system(PyObject *self, PyObject *args) {
@@ -882,9 +834,6 @@ static struct PyMethodDef ExtendpyMethods[] = {
     },
     {"get_microenv", physicell_get_microenv, METH_VARARGS,
      "input:\n    substrate name (string)\n\noutput:\n    values (list of list of floats).\n\nrun:\n    from extending import physicell\n    physicell.get_microenv('my_substrate')\n\ndescription:\n    function to recall a voxel center coordinates and substrate concentration."
-    },
-    {"get_graph", physicell_get_graph, METH_VARARGS,
-     "input:\n    graph type name (string)\n\noutput:\n    values (list of list of int).\n\nrun:\n    from extending import physicell\n    physicell.get_graph('graph_type')\n\ndescription:\n    function to recall the graph for the specified graph type (neighbor, attached, spring) for the current time step."
     },
     {"system", physicell_system, METH_VARARGS, "execute a shell command."},
     /*{NULL, NULL, 0, NULL}  // Sentinel */

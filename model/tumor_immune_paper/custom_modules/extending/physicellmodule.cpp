@@ -70,7 +70,18 @@ void modified_delete_cell(Cell* pDeleteMe) {
 }
 
 // destroy all safely
+// destroy all safely
 void destroy_all_cells() {
+    // 1. The Clever Edge: Sever all graph relationships globally first.
+    // This prevents any cell from reaching into another cell's memory during deletion.
+    for (int i = 0; i < all_cells->size(); ++i) {
+        (*all_cells)[i]->state.neighbors.clear();
+        (*all_cells)[i]->state.attached_cells.clear();
+        (*all_cells)[i]->state.spring_attachments.clear();
+    }
+
+    // 2. Now safely delete them. 
+    // The remove_self_from_all_neighbors() will just see empty lists and safely do nothing.
     for (int i = all_cells->size() - 1; i >= 0; --i) {
         modified_delete_cell((*all_cells)[i]);
     }
@@ -140,8 +151,7 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
         XML_status = read_PhysiCell_config_file(settingxml);
         if (XML_status) { PhysiCell_settings.read_from_pugixml(); }
         if (!XML_status) { exit(-1); }
-        //PhysiCell_settings.max_time = 1440 + (std::rand() % (10080 - 1440 + 1));
-        //PhysiCell_settings.max_time = 1440;
+        
         create_output_directory(PhysiCell_settings.folder);
 
         // OpenMP setup
@@ -150,6 +160,7 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
         // reset cells
         std::cout << "reset cells ..." << std::endl;
         destroy_all_cells();
+        
         std::cout << "reset_max_basic_agent_ID ..." << std::endl;
         BioFVM::reset_max_basic_agent_ID();
 
@@ -157,20 +168,18 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
         std::cout << "reset mesh0 ..." << std::endl;
         BioFVM::reset_BioFVM_substrates_initialized_in_dom();
 
-        // reset microenvironment and mechanics voxel size and match the data structure to BioFVM
+        // reset microenvironment
         std::cout << "reset densities ..." << std::endl;
         set_microenvironment_initial_condition();
         microenvironment.display_information(std::cout);
-        double mechanics_voxel_size = 30;
-        Cell_Container* cell_container = create_cell_container_for_microenvironment(microenvironment, mechanics_voxel_size);
+
+        // ✅ REMOVED the create_cell_container_for_microenvironment lines!
+        // The old container is still there and perfectly empty.
 
         // reset tissue
         std::cout << "reset tissue ..." << std::endl;
         display_cell_definitions(std::cout);
-        setup_tissue();  // modify this in the custom code
-
-        // MultiCellDS save options
-        // have only to be set once per runtime
+        setup_tissue();  
     }
 
     // copy config file to output directory
@@ -240,6 +249,15 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
 
 // extended Python C++ function step
 static PyObject* physicell_step(PyObject *self, PyObject *args) {
+    // ===== SILENCE START =====
+    int stdout_fd = dup(STDOUT_FILENO);
+    int stderr_fd = dup(STDERR_FILENO);
+
+    int devnull = open("/dev/null", O_WRONLY);
+    dup2(devnull, STDOUT_FILENO);
+    dup2(devnull, STDERR_FILENO);
+    close(devnull);
+    // =========================
     // main loop
 
     // bue 2024-02-01: simplify (no try catch)
@@ -413,6 +431,12 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
                 SVG_plot(filename, microenvironment, 0.0, PhysiCell_globals.current_time, cell_coloring_function, substrate_coloring_function);
             }
         }
+    // ===== RESTORE OUTPUT =====
+    dup2(stdout_fd, STDOUT_FILENO);
+    dup2(stderr_fd, STDERR_FILENO);
+    close(stdout_fd);
+    close(stderr_fd);
+    // ==========================
 
     //} catch (const std::exception& e) {  // reference to the base of a polymorphic object
     //    std::cout << e.what();  // information from length_error printed
