@@ -31,6 +31,7 @@ from tysserand import tysserand as ty
 from sklearn.cluster import KMeans
 import cv2
 from numpy.fft import fft2, fftshift
+from scipy.special import expit
 
 
 # function
@@ -351,10 +352,10 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         for i, subs in enumerate(self.substrate_unique):
             for (x_bin, y_bin), value in grouped[subs].items():
                 image[i, x_bin, y_bin] = value
-        min_vals = image.min(axis=(1, 2), keepdims=True)
-        max_vals = image.max(axis=(1, 2), keepdims=True)
-        scales = np.where((max_vals - min_vals) > 0, max_vals - min_vals, 1)
-        return ski.util.img_as_ubyte(((image - min_vals) / scales))
+        # min_vals = image.min(axis=(1, 2), keepdims=True)
+        # max_vals = image.max(axis=(1, 2), keepdims=True)
+        # scales = expit(image)
+        return ski.util.img_as_ubyte(expit(image))
 
     def get_observation(self):
         """
@@ -471,7 +472,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             truncated (the episode reached the max time limit).
         """
         # model dependent terminated processing logic goes here!
-        return True if (self.c_t > 1024) or (self.c_t == 0) else False
+        return True if self.c_t <= 3 or self.c_t > 256 else False
 
     def get_reset_values(self):
         """
@@ -511,7 +512,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         expected_growth = max(expected_growth, 1e-8)
 
         r_tumor = (self.c_prev - self.c_t) / expected_growth
-        return 1 / (1 + np.exp(-r_tumor))
+        r_tumor_safe = np.clip(r_tumor, -500, 500)
+        return 1 / (1 + np.exp(-r_tumor_safe))
 
     def get_img(self):
         """
