@@ -121,7 +121,7 @@ def make_physigym_env(env_id: int, cfg: dict):
         tree = etree.parse(env_xml)
         root = tree.getroot()
         root.xpath("//overall/max_time")[0].text = str(sim_cfg["max_time"])
-        root.xpath("//parallel/omp_num_threads")[0].text = str(threads_per_env)
+        root.xpath("//parallel/omp_num_threads")[0].text = str(1) #str(threads_per_env)
         root.xpath("//save/folder")[0].text = os.path.join(
             model_cfg_copy["output_dir"], f"env{env_id}"
         )
