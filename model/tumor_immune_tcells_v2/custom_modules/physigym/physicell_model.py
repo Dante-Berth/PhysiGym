@@ -124,15 +124,24 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             action parameter, action custom variable, and action custom vector.
         """
 
-        # model dependent action_space processing logic goes here!
         d_action_space = spaces.Dict(
             {
-                "drug_1": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                "drug_1_dose": spaces.Box(
+                    low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                ),
+                "drug_1_x": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                "drug_1_y": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                "drug_1_radius": spaces.Box(
+                    low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                ),
             }
         )
 
         # output
         return d_action_space
+
+    def get_dose_spent(self):
+        return physicell.get_parameter("drug_1_amount_used") / (self.total_volume)
 
     def get_observation_space(self):
         """
@@ -352,13 +361,11 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         for i, subs in enumerate(self.substrate_unique):
             for (x_bin, y_bin), value in grouped[subs].items():
                 image[i, x_bin, y_bin] = value
-        # min_vals = image.min(axis=(1, 2), keepdims=True)
-        # max_vals = image.max(axis=(1, 2), keepdims=True)
-        # scales = expit(image)
-        return ski.util.img_as_ubyte(expit(image))
+
+        return ski.util.img_as_ubyte(np.clip(image, 0, 1))
 
     def get_observation(self):
-        """
+        """expit
         input:
 
         output:
@@ -510,10 +517,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         expected_growth = self.c_prev * (np.exp(self.lambda_dt) - 1.0)
         expected_growth = max(expected_growth, 1e-8)
-
         r_tumor = (self.c_prev - self.c_t) / expected_growth
-        r_tumor_safe = np.clip(r_tumor, -500, 500)
-        return 1 / (1 + np.exp(-r_tumor_safe))
+        return r_tumor
 
     def get_img(self):
         """
