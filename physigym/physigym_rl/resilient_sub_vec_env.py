@@ -1,14 +1,15 @@
-import multiprocessing as mp
 import numpy as np
-from typing import Set
+from typing import Set, List
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv, _stack_obs
-from gymnasium import spaces
+import faulthandler
+
+faulthandler.enable()
 
 
 # ------------------------------------------------------------------
 # Dummy env used to replace crashed ones safely
 # ------------------------------------------------------------------
-class DummyEnv:
+class ToyEnv:
     """Safe placeholder for crashed environments."""
 
     def __init__(self, observation_space):
@@ -31,7 +32,20 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
     """
     SubprocVecEnv variant that permanently disables crashing environments
     instead of restarting them (PhysiCell-safe).
+
+    Key fixes vs naive implementation:
+      - Observation spaces are cached at __init__ time, so _disable_env
+        never needs to spawn a new PhysiCell instance (which is forbidden).
+      - remote.poll(timeout) is used before recv() so a SIGABRT that does
+        not cleanly close the pipe is caught as a timeout rather than
+        hanging forever.
+      - step_async checks is_alive() and wraps send() so a process that
+        died between steps is caught immediately.
     """
+
+    # Tune this to slightly above your longest expected step duration.
+    STEP_TIMEOUT_S: float = 120.0
+    RESET_TIMEOUT_S: float = 300.0
 
     def __init__(self, env_fns, start_method="spawn"):
         assert start_method == "spawn", "PhysiCell requires spawn"
@@ -42,9 +56,20 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
 
         super().__init__(env_fns, start_method=start_method)
 
-        # Make mutable
+        # Make mutable (parent stores as tuples)
         self.remotes = list(self.remotes)
         self.processes = list(self.processes)
+
+        # -------------------------------------------------------
+        # Cache observation spaces NOW, before any env can crash.
+        # This is the critical fix: _disable_env must never call
+        # env_fns[i]() because PhysiCell forbids >1 instance.
+        # -------------------------------------------------------
+        self._obs_spaces = [self.observation_space] * self.num_envs
+
+    def get_modify_observation_space(self, observation_space):
+        self.observation_space = observation_space
+        self._obs_spaces = [self.observation_space] * self.num_envs
 
     # ------------------------------------------------------------------
     # Crash handling
@@ -67,8 +92,8 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
         except Exception:
             pass
 
-        # Create dummy env for safe stepping
-        self._dummy_envs[i] = DummyEnv(self.env_fns[i]().observation_space)
+        # Use pre-cached obs space — never spawn a new env here
+        self._dummy_envs[i] = ToyEnv(self._obs_spaces[i])
 
     # ------------------------------------------------------------------
     # Safe set_attr: skips dead envs
@@ -99,7 +124,16 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
         for i, (remote, action) in enumerate(zip(self.remotes, actions)):
             if i in self.dead_envs:
                 continue
-            remote.send(("step", action))
+            # Catch processes that died silently between steps
+            if not self.processes[i].is_alive():
+                print(f"[ResilientVecEnv] Env {i} died between steps, disabling.")
+                self._disable_env(i)
+                continue
+            try:
+                remote.send(("step", action))
+            except (BrokenPipeError, OSError) as e:
+                print(f"[ResilientVecEnv] Send failed on env {i}: {e}")
+                self._disable_env(i)
         self.waiting = True
 
     def step_wait(self):
@@ -112,8 +146,16 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
                 continue
 
             try:
-                results.append(remote.recv())
-            except (EOFError, BrokenPipeError, OSError):
+                if remote.poll(timeout=self.STEP_TIMEOUT_S):
+                    results.append(remote.recv())
+                else:
+                    # Subprocess hung or died without closing the pipe (SIGABRT)
+                    print(f"[ResilientVecEnv] Timeout waiting for env {i}, disabling.")
+                    self._disable_env(i)
+                    obs, reward, done, info = self._dummy_envs[i].step(None)
+                    results.append((obs, reward, done, info, info))
+            except (EOFError, BrokenPipeError, OSError) as e:
+                print(f"[ResilientVecEnv] Pipe error on env {i}: {e}")
                 self._disable_env(i)
                 obs, reward, done, info = self._dummy_envs[i].step(None)
                 results.append((obs, reward, done, info, info))
@@ -135,9 +177,14 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
         for i, remote in enumerate(self.remotes):
             if i in self.dead_envs:
                 continue
+            if not self.processes[i].is_alive():
+                print(f"[ResilientVecEnv] Env {i} dead at reset, disabling.")
+                self._disable_env(i)
+                continue
             try:
                 remote.send(("reset", (self._seeds[i], self._options[i])))
-            except (OSError, EOFError, BrokenPipeError):
+            except (OSError, EOFError, BrokenPipeError) as e:
+                print(f"[ResilientVecEnv] Send failed at reset on env {i}: {e}")
                 self._disable_env(i)
 
         results = []
@@ -148,8 +195,15 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
                 continue
 
             try:
-                results.append(remote.recv())
-            except (EOFError, BrokenPipeError, OSError):
+                if remote.poll(timeout=self.RESET_TIMEOUT_S):
+                    results.append(remote.recv())
+                else:
+                    print(f"[ResilientVecEnv] Timeout at reset for env {i}, disabling.")
+                    self._disable_env(i)
+                    obs, reset_info = self._dummy_envs[i].reset()
+                    results.append((obs, reset_info))
+            except (EOFError, BrokenPipeError, OSError) as e:
+                print(f"[ResilientVecEnv] Pipe error at reset on env {i}: {e}")
                 self._disable_env(i)
                 obs, reset_info = self._dummy_envs[i].reset()
                 results.append((obs, reset_info))
