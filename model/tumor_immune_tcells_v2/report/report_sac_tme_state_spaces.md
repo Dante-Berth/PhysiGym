@@ -515,3 +515,75 @@ Despite identical cumulative dose between I2 and S3, only I2 achieves a better f
 | All agents: return rollback? | No | **Yes** |
 
 The contrast between these two episodes reveals that the state space advantage of I2 is most decisive when eradication is achievable — in that regime I2 pushes all the way to the termination threshold while I1 and S3 stall. When the tumour is more resilient (run\_000147), all three agents struggle with the rebound, but I2 still maintains the highest final return. This suggests the substrate spatial information is especially critical for the **final-phase targeting** needed to cross the eradication threshold.
+
+---
+
+## 12. W&B Training Curves & Observation Visualisations
+
+### 12.1 Observation Mode Visualisation (I2 — `img_mc_cells_substrates`)
+
+The images below show the 8-channel image observation at six time steps of a single episode, illustrating what the best-performing agent actually sees.
+
+| Step 0 | Step 20 | Step 40 |
+|--------|---------|---------|
+| ![obs0](../img/observation_0.png) | ![obs20](../img/observation_20.png) | ![obs40](../img/observation_40.png) |
+
+| Step 60 | Step 80 | Step 100 |
+|---------|---------|----------|
+| ![obs60](../img/observation_60.png) | ![obs80](../img/observation_80.png) | ![obs100](../img/observation_100.png) |
+
+Each image has 8 channels (shown as separate panels): **CH 0–2** = tumor, T-cell, macrophage density grids; **CH 3–5** = anti\_tumoral\_factor, pro\_tumoral\_factor, drug\_1 concentration maps; **CH 6–7** = tumor\_molecule, cytokine maps.
+
+**Key observation per state space:**
+
+| State space | What the agent sees | What is missing |
+|-------------|--------------------|--------------------|
+| **I2** `img_mc_cells_substrates` (6ch, 64×64) | Full spatial layout of all 3 cell types + anti\_tumoral, pro\_tumoral, drug\_1 concentration maps | tumor\_molecule, cytokine (channels 6–7 not included) |
+| **I1** `img_mc_cells` (3ch, 64×64) | Spatial layout of tumor, T-cell, macrophage only | All substrate maps — no feedback on drug spread or immune gradients |
+| **S3** `spatial_scalars_cells` (21-dim) | Per cell type: presence flag, x\_mean, y\_mean, x\_std, y\_std, dist\_to\_center | All substrate information; spatial resolution limited to centroid/spread summary |
+| **S1** `scalars_cells` (3-dim) | Normalised alive count per cell type only | Spatial structure, substrate gradients — minimal signal |
+
+The substrate channels (CH 3–5) are crucial: **CH 4** (`pro_tumoral_factor`) shows where the immunosuppressive gradient is strongest — exactly where the agent must deliver drug to repolarise macrophages. Without this, I1 and S1 agents cannot close the feedback loop between dosing and macrophage repolarisation.
+
+For **S2** (`scalars_cells_substrates`) and **S4/S5** (scalar substrate extensions): adding `max(concentration)` per substrate introduces a single scalar per substrate — this is dominated by the global peak and adds noise rather than spatial signal, explaining why S2 performs worse than S1 and S4/S5 do not outperform S3.
+
+---
+
+### 12.2 Training Curves — All Observation Modes (W&B panels)
+
+The panels below cover **all 7 observation modes** (S1–S5, I1, I2). Legend: **I2** `img_mc_cells_substrates` = red dashed; **I1** `img_mc_cells` = dark green; **S5** `spatial_scalars_cells_spatial_substrates` = green dot; **S3** `spatial_scalars_cells` = blue; **S4** `spatial_scalars_cells_substrates` = red solid; **S2** `scalars_cells_substrates` = cyan; **S1** `scalars_cells` = grey.
+
+**Training return (smoothed, `train_return_mean50`):**
+
+![train_return_mean50](../img/Section-2-Panel-3-uwnnqvhkz.png)
+
+**I2** (red dashed) separates clearly from all other modes after ~50k steps and reaches ~75–80 by 500k steps. **I1** (dark green) converges to ~47, showing that spatial cell images alone provide strong signal but the substrate gap is decisive. All scalar modes (S1–S5) plateau below 35, confirming the image vs. scalar gap reported in §6. Among scalars, **S3** (blue) is most stable; S4/S5 with substrate scalars do not outperform S3 despite higher dimensionality.
+
+**Training return standard deviation (`train_return_std`):**
+
+![train_return_std](../img/Section-2-Panel-2-g0ddriu6t.png)
+
+**I2** and **I1** maintain consistently high std (~60–65) throughout training — reflecting the diverse episode outcomes across seeds (some near-eradication, some rebound). Scalar modes show lower and decreasing std, meaning their policies converge to a narrower, less ambitious behavioural range.
+
+**Test return — rectangle layout (raw):**
+
+![test_rectangle_return_raw](../img/Section-2-Panel-0-t6c8f8adz.png)
+
+**Test return — circular layout (raw):**
+
+![test_circular_return_raw](../img/Section-2-Panel-1-v5gma8p0j.png)
+
+On both held-out test layouts, **I2** (red dashed) leads with the highest and most consistent returns. **I1** (dark green) shows volatile performance — competitive on some seeds, poor on others — highlighting that without substrate information, generalisation to unseen layouts is unreliable. Scalar modes (S1–S5) are clustered near zero or negative on both test layouts, with high run-to-run variance. The circular layout (right) is harder to generalise to: even I2 shows more spread than on rectangle.
+
+**Test return (smoothed, `test_return_mean50`):**
+
+![test_return_mean50](../img/Section-2-Panel-6-42sh5v4hc.png)
+
+The smoothed view confirms **I2** as the dominant mode on test, steadily climbing to ~55–60 by 500k steps. **I1** trails at ~20–25. Among scalar modes, **S3** is the most stable but peaks around 15. `scalars_cells_substrates` (S2, cyan) degrades after an early peak — the substrate noise problem: max-concentration scalars overfit to training layout geometry and do not transfer.
+
+**Test return standard deviation (`test_return_std`):**
+
+![test_return_std](../img/Section-2-Panel-4-q55wfb7fm.png)
+
+**I2** shows the highest test std across all modes — reflecting that it achieves very high returns on some episodes (near-eradication) and moderate returns on others. This is a sign of a capable but not yet fully robust policy, rather than instability. All scalar modes converge to low test std, consistent with conservative low-dose policies that produce predictable but modest outcomes.
+
