@@ -457,3 +457,61 @@ This single episode illustrates the key argument of the report in concrete terms
 2. **Spatial targeting requires spatial state.** To place the drug optimally (inside a dense tumor cluster where macrophages are present), the agent needs to see *where* the factors are concentrated. The 64×64 substrate grids provide this; the scalar max-concentration S2 mode does not. S3's spatial cell features provide partial spatial information but miss the substrate coupling entirely.
 
 3. **S3 reaches partial control but not eradication.** Knowing the centroid and spread of each cell type is enough to develop a rough spatial drug strategy, but without knowing where `pro_tumoral_factor` is suppressing T-cell infiltration, the agent cannot achieve the final push to eradication.
+
+---
+
+## 11. Episode Comparison — run\_000147 (seed 128)
+
+The figure below shows a second matched episode (`run_000147`, seed 128, network-field training layout) comparing the same three state spaces. This episode is harder than run\_000143: no agent achieves near-eradication, and all three exhibit a **return rollback** in the second half of the episode.
+
+![Episode comparison 2](figures/fig_episode_comparison_2.png)
+
+### 11.1 Episode Statistics
+
+| Metric | I2 — `img_mc_cells_substrates` | I1 — `img_mc_cells` | S3 — `spatial_scalars_cells` |
+|--------|:------------------------------:|:-------------------:|:----------------------------:|
+| Final tumor count | 31 | 64 | 43 |
+| Cumulative return (final) | **+53.4** | +35.0 | +32.3 |
+| Peak cumulative return | **+63.1** (step 365) | +58.2 (step 323) | +66.6 (step 330) |
+| Cumulative dose used | **35.69** | 7.16 | 34.92 |
+| Peak dose per step | **0.834** | 0.563 | 0.496 |
+| Episode length | 480 steps | 480 steps | 480 steps |
+
+### 11.2 Panel-by-Panel Interpretation
+
+**Cumulative Return (top panel)**
+
+All three agents build positive cumulative return through the first ~330 steps, then the slope flattens or turns negative — indicating the tumor rebounds after initial suppression. The three trajectories are remarkably close up to step ~200, then diverge:
+
+- **I2** (+53.4 final) maintains the lead throughout and declines the least after its peak (+63.1 at step 365). Its substrate channels continue to provide feedback that lets the agent partially contain the rebound.
+- **S3** peaks highest of the three (+66.6 at step 330) but declines more sharply afterward, ending at +32.3. The spatial cell features are sufficient for early suppression but cannot sustain it once the tumor re-establishes — without substrate spatial information the agent cannot track the evolving immunosuppressive gradient.
+- **I1** (+35.0 final) shows the same rollback pattern. Notably its peak (+58.2 at step 323) is close to S3, suggesting both modes achieve similar early suppression but both lose control past the midpoint for different reasons.
+
+Comparing with run\_000143: in that episode I2 achieved +175 by near-eradicating the tumour (final count 4). Here the tumour is not eradicated (final count 31), so the agent accumulates fewer positive rewards in the second half — illustrating that the reward function is **trajectory-sensitive**: near-eradication yields compounding positive rewards, while a stabilised-but-not-eliminated tumour yields near-zero per-step rewards as growth and suppression balance out.
+
+**Cumulative Drug Used (middle panel)**
+
+The drug usage split is starker here than in run\_000143:
+
+- **I2 and S3** both apply ~35 cumulative dose units, nearly identical and much higher than I1.
+- **I1** uses only 7.2 units — again under-medicating severely, consistent with the pattern seen in run\_000143. The cell-only image provides no substrate feedback, so the policy has not learned to commit to sustained dosing.
+
+Despite identical cumulative dose between I2 and S3, only I2 achieves a better final outcome (+53.4 vs +32.3), confirming that **where** the drug is placed (guided by substrate maps in I2) matters as much as **how much** is applied.
+
+**Drug Dose per Step — dosing schedule (bottom panel)**
+
+- **I2** shows a burst-heavy schedule concentrated in the second half (steps 300–480), corresponding to an attempted late-episode push against the rebounding tumour. The largest spikes appear after step 350, when cumulative return is already declining — a reactive rather than pre-emptive strategy.
+- **S3** applies doses more uniformly across the episode with moderate spikes, reflecting a spatial-centroid-based targeting strategy that lacks the precision of substrate gradient information.
+- **I1** produces sparse, low-amplitude pulses throughout with no sustained burst phase — confirming it has learned a fundamentally conservative policy that fails to commit drug resources at the critical moments.
+
+### 11.3 Comparison Between run\_000143 and run\_000147
+
+| | run\_000143 (seed 64) | run\_000147 (seed 128) |
+|---|:---:|:---:|
+| I2 final tumor | **4** (near-eradication) | 31 (rebound) |
+| I2 cumulative return | +175.1 | +53.4 |
+| I1 final tumor | 112 | 64 |
+| S3 final tumor | 14 | 43 |
+| All agents: return rollback? | No | **Yes** |
+
+The contrast between these two episodes reveals that the state space advantage of I2 is most decisive when eradication is achievable — in that regime I2 pushes all the way to the termination threshold while I1 and S3 stall. When the tumour is more resilient (run\_000147), all three agents struggle with the rebound, but I2 still maintains the highest final return. This suggests the substrate spatial information is especially critical for the **final-phase targeting** needed to cross the eradication threshold.
