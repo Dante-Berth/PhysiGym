@@ -11,11 +11,11 @@
 
 The reinforcement learning environment simulates a **Tumor Micro-Environment (TME)** using PhysiCell. The agent controls targeted drug delivery to reduce tumor cell proliferation. Three cell types are modeled:
 
-| Cell type     | Role                     | Color  |
-|---------------|--------------------------|--------|
-| `tumor`       | Target — to be eliminated | red    |
-| `macrophage`  | Immune effector (M1/M2)   | green  |
-| `t_cell`      | Adaptive immune effector  | blue   |
+| Cell type     | Role                     |
+|---------------|--------------------------|
+| `tumor`       | Target — to be eliminated |
+| `macrophage`  | Immune effector (M1/M2)   |
+| `t_cell`      | Adaptive immune effector  |
 
 Five substrates exist in the microenvironment (`PhysiCell_settings.xml`):
 
