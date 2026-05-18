@@ -326,7 +326,7 @@ Rect: Rectangular, Circ: Circular.
 
 ## 7. Analysis & Key Findings
 
-### 6.1 Image-Based State Spaces Outperform Scalar State Spaces
+### 7.1 Image-Based State Spaces Outperform Scalar State Spaces
 
 The clearest finding is that **image-based representations (`I1`, `I2`) yield substantially higher and more consistent training returns** than scalar-based ones (`S1`–`S5`).
 
@@ -342,7 +342,7 @@ The clearest finding is that **image-based representations (`I1`, `I2`) yield su
   - Test: +20.8 → +56.5 (+36 points)
   - The substrate channels (debris, pro-tumoral, anti-tumoral factors) provide direct information about where the drug has been applied and its effects, enabling better credit assignment.
 
-### 6.2 Scalar Spatial Features Help Training but Not Generalization
+### 7.2 Scalar Spatial Features Help Training but Not Generalization
 
 - **`spatial_scalars_cells` (S3)** achieves a similar *training* return to `img_mc_cells` (+51 vs +50), but its test rectangle return is surprisingly high (+112.7 on average), driven by seed 64 (+223.1). This is likely a lucky seed rather than a robust result — seed 1 collapses to −28.9 test50.
 
@@ -350,7 +350,7 @@ The clearest finding is that **image-based representations (`I1`, `I2`) yield su
 
 - **`scalars_cells` (S1)** and **`scalars_cells_substrates` (S2)** show near-random or negative performance on both training and testing, confirming that aggregate cell counts alone provide insufficient signal for the agent to learn spatial drug delivery.
 
-### 6.3 More Scalar Features ≠ Better Performance
+### 7.3 More Scalar Features ≠ Better Performance
 
 Counter-intuitively, adding more scalar features does not improve performance:
 
@@ -361,7 +361,7 @@ Train mean50:                +5.9    → −16.8   → +51.2    → +29.2    →
 
 The `spatial_scalars_cells_spatial_substrates` (S5, 39-dim) performs **worse** than just spatial cell features (S3, 21-dim). The substrate spatial features may add noise that destabilizes learning, or the combined 39-dim space is too high-dimensional for the scalar MLP to optimize within 500k steps.
 
-### 6.4 Seed Sensitivity
+### 7.4 Seed Sensitivity
 
 Scalar modes exhibit much higher seed-to-seed variance than image modes:
 
@@ -404,7 +404,7 @@ If compute is constrained and image processing overhead is a concern, **`spatial
 
 ## 9. Spatial Layout Examples
 
-The figures below show representative initial cell configurations for each evaluation regime. Colors: **red** = tumor, **blue** = T-cell, **green** = macrophage.
+The figures below show representative initial cell configurations for each evaluation regime.
 
 ### 9.1 Test Layouts (held-out, never seen during training)
 
