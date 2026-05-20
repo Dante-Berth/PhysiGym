@@ -204,6 +204,7 @@ Seven observation modes were evaluated. All scalar modes are **float32**; image 
 | **S3** | `spatial_scalars_cells` | scalar | `(21,)` | Cell counts + spatial statistics per cell type (presence, x_mean, y_mean, x_std, y_std, dist_to_center) |
 | **S4** | `spatial_scalars_cells_substrates` | scalar | `(27,)` | Cell counts + substrate scalars + cell spatial statistics |
 | **S5** | `spatial_scalars_cells_spatial_substrates` | scalar | `(39,)` | Cell counts + substrate scalars + spatial features for both cells and substrates |
+| **K1** | `kmeans_spatial_scalars_cells_substrates` | scalar | `(cell_types×6×k + substrates×6×k,)` | K-Means cluster descriptors for both cells and substrates (default k=3 → 144-dim) |
 | **I1** | `img_mc_cells` | image | `(3, 64, 64)` | One channel per cell type: spatial density grid |
 | **I2** | `img_mc_cells_substrates` | image | `(6, 64, 64)` | Cell density grids + substrate concentration grids |
 
@@ -222,6 +223,22 @@ Coordinates normalized to [0,1] over the domain.
 **Spatial substrate features (`get_spatial_substrate_features`):**  
 Per substrate (6 values): `[mean, std, min, max, x_centroid, y_centroid]`  
 Concentration-weighted centroid.
+
+**K-Means spatial features — cells (`get_spatial_features`, K1 mode):**  
+Per cell type, `k` clusters × 6 values = `[presence, global_weight, cx, cy, std_x, std_y]`  
+- `presence`: 1.0 if cluster is populated, 0.0 if cell type is absent  
+- `global_weight`: fraction of total alive cells (all types) in this cluster  
+- `cx`, `cy`: cluster centroid, normalized to [0, 1] over the domain  
+- `std_x`, `std_y`: standard deviation of cell positions within the cluster  
+Clusters sorted descending by `global_weight`; unused slots remain 0.
+
+**K-Means spatial features — substrates (`get_spatial_substrate_features`, K1 mode):**  
+Per substrate, `k` clusters × 6 values = `[presence, mass_fraction, cx, cy, std_x, std_y]`  
+- `presence`: 1.0 if substrate is present above threshold (1% of max concentration)  
+- `mass_fraction`: fraction of total substrate mass in this cluster  
+- `cx`, `cy`: concentration-weighted cluster centroid, normalized to [0, 1]  
+- `std_x`, `std_y`: concentration-weighted standard deviation of positions  
+K-Means is weighted by concentration so chemical hotspots dominate cluster placement. Clusters sorted descending by `mass_fraction`.
 
 **Image features (`get_matrix_cells` / `get_matrix_substrates`):**  
 Cells are discretized onto a 64×64 grid; pixel intensity ∝ cell density per voxel, clipped to [0,255]. One channel per cell type or substrate.
@@ -402,11 +419,89 @@ If compute is constrained and image processing overhead is a concern, **`spatial
 
 ---
 
-## 9. Spatial Layout Examples
+## 9. K-Means State Space — K1 (`kmeans_spatial_scalars_cells_substrates`)
+
+### 9.1 Motivation
+
+The existing scalar modes (S1–S5) either discard spatial structure entirely or summarize it with simple statistics (centroid, std) computed over the full cell population of each type. The image modes (I1, I2) preserve full spatial structure but require a CNN and scale quadratically with resolution. **K1 sits between these two extremes**: it provides structured spatial information about *where* the populations concentrate (their spatial modes), without the overhead of a full 64×64 grid.
+
+The key insight is that both cell populations and chemical substrates in this TME tend to form a small number of **localized clusters or hotspots** rather than being uniformly distributed. K-Means extracts these clusters directly, giving the agent a compact description of the spatial configuration.
+
+### 9.2 Observation Vector Structure
+
+With default `k=3` and this environment's 3 cell types + 5 substrates:
+
+```
+Total dimension = (3 cell types × 6 features × 3 clusters) + (5 substrates × 6 features × 3 clusters)
+               = 54 + 90
+               = 144
+```
+
+The vector is laid out as:
+
+```
+[ cell_type_0_cluster_0 (6) | cell_type_0_cluster_1 (6) | cell_type_0_cluster_2 (6)
+  cell_type_1_cluster_0 (6) | ...
+  cell_type_2_cluster_0 (6) | ...
+  substrate_0_cluster_0 (6) | substrate_0_cluster_1 (6) | substrate_0_cluster_2 (6)
+  substrate_1_cluster_0 (6) | ...
+  ...
+  substrate_4_cluster_0 (6) | ... ]
+```
+
+Each 6-element block: `[presence, weight, cx, cy, std_x, std_y]`
+
+### 9.3 Design Choices
+
+| Choice | Rationale |
+|--------|-----------|
+| Concentration-weighted K-Means for substrates | Ensures cluster centers are pulled toward chemical hotspots, not background noise |
+| 1% concentration threshold before clustering | Filters near-zero background so K-Means is not wasted on trivial points |
+| Clusters sorted by weight/mass_fraction descending | Cluster index 0 is always the largest/heaviest group — provides stable ordering across timesteps so the policy network sees consistent positional semantics |
+| `presence` flag per cluster | Distinguishes "cluster 2 is absent" (zeros) from "cluster 2 is centered at (0,0) with zero spread" — prevents ambiguous all-zero representations |
+| Normalization to domain [0,1] | All positional features (`cx`, `cy`, `std_x`, `std_y`) are in the same scale as each other and across episodes |
+| Global weight for cells | `global_weight = cluster_size / total_alive_cells` normalizes by total population, making the weight comparable across cell types and timesteps |
+
+### 9.4 Comparison with Other Scalar Modes
+
+| | S3 (21-dim) | S5 (39-dim) | K1 (144-dim, k=3) |
+|---|---|---|---|
+| Cell spatial info | centroid + std (1 blob per type) | centroid + std (1 blob per type) | up to k blobs per type |
+| Substrate spatial info | none | centroid + std (1 blob per substrate) | up to k hotspots per substrate |
+| Multi-modal distributions | no | no | **yes** |
+| Absent entity handling | implicit zeros | implicit zeros | explicit presence flag |
+| Dimensionality | 21 | 39 | 54–144 (depends on k) |
+
+The key advantage over S3/S5 is that K1 can represent **multi-modal spatial distributions** — for example, a tumor mass split into two separate clusters, or two chemical hotspots from prior drug injections. S3 and S5 collapse each entity to a single centroid, which is misleading when the distribution is bimodal.
+
+### 9.5 Relationship to Image Modes
+
+K1 can be seen as a learned, sparse approximation to the information in I2:
+- I2 encodes exact voxel-level concentration at 64×64 resolution (4,096 values per channel)
+- K1 encodes only the `k` dominant spatial modes (6k values per channel)
+
+K1 loses fine-grained spatial detail but gains:
+- **Fixed compact size** regardless of domain resolution
+- **Translation-invariant cluster statistics** (std encodes spread, not position of each cell)
+- **Compatibility with standard MLP policies** — no CNN required
+- **Interpretability** — each feature has a direct biological meaning
+
+### 9.6 Expected Positioning in the Results
+
+K1 has not yet been included in the W&B comparison runs. Based on the design:
+
+- K1 should outperform S3/S5 on multi-modal spatial configurations (rectangle, circular test layouts) where a single centroid is a poor summary of the cell distribution
+- K1 is unlikely to fully close the gap with I2, since substrate gradient topology (required for precise drug placement) is richer than k cluster centers
+- K1 may be more **seed-stable** than S3/S5 because the structured representation reduces the state-aliasing that causes high seed variance in scalar modes
+- The optimal `k` is likely 2–4 for this domain: the tumor tends to form 1–3 clusters, T-cells spread along anti-tumoral factor gradients (1–2 hotspots), and macrophages cluster near tumor (1–2 foci)
+
+---
+
+## 10. Spatial Layout Examples
 
 The figures below show representative initial cell configurations for each evaluation regime.
 
-### 9.1 Test Layouts (held-out, never seen during training)
+### 10.1 Test Layouts (held-out, never seen during training)
 
 ![Spatial layouts overview](figures/fig_layouts.png)
 
@@ -415,14 +510,14 @@ The figure shows all four layouts side-by-side. Test layouts (rectangle, circula
 
 ---
 
-## 10. Episode Comparison — run\_000143
+## 11. Episode Comparison — run\_000143
 
 The figure below compares a single matched episode (step 143 of the test rollout, network-field layout) across the three best-performing state spaces: **I2** (`img_mc_cells_substrates`), **I1** (`img_mc_cells`), and **S3** (`spatial_scalars_cells`).
 
 ![Episode comparison](figures/fig_episode_comparison.png)
 
 
-### 10.1 Episode Statistics
+### 11.1 Episode Statistics
 
 | Metric | I2 — `img_mc_cells_substrates` | I1 — `img_mc_cells` | S3 — `spatial_scalars_cells` |
 |--------|:------------------------------:|:-------------------:|:----------------------------:|
@@ -432,7 +527,7 @@ The figure below compares a single matched episode (step 143 of the test rollout
 | Peak dose per step | 0.813 | 0.451 | 0.484 |
 | Episode length | 480 steps | 480 steps | 480 steps |
 
-### 10.2 Panel-by-Panel Interpretation
+### 11.2 Panel-by-Panel Interpretation
 
 **Cumulative Return (top panel)**
 
@@ -448,7 +543,7 @@ I2 and S3 both apply significantly more drug (35.4 and 31.1 cumulative dose unit
 
 All three agents show high variance in per-step dosing, consistent with the stochastic nature of the SAC policy and the spatially heterogeneous tumour environment. I2 shows pronounced late-episode spikes (steps 300–480), corresponding to the final push toward eradication (tumor count approaching the termination threshold of ≤3). I1 shows sparse, low-magnitude pulses throughout, with no concentrated effort. S3 distributes dosing more evenly, suggesting a less spatially-targeted strategy that nevertheless achieves partial tumour control.
 
-### 10.3 Why I2 Succeeds Where I1 Fails
+### 11.3 Why I2 Succeeds Where I1 Fails
 
 This single episode illustrates the key argument of the report in concrete terms:
 
@@ -460,13 +555,13 @@ This single episode illustrates the key argument of the report in concrete terms
 
 ---
 
-## 11. Episode Comparison — run\_000147 (seed 128)
+## 12. Episode Comparison — run\_000147 (seed 128)
 
 The figure below shows a second matched episode (`run_000147`, seed 128, network-field training layout) comparing the same three state spaces. This episode is harder than run\_000143: no agent achieves near-eradication, and all three exhibit a **return rollback** in the second half of the episode.
 
 ![Episode comparison 2](figures/fig_episode_comparison_2.png)
 
-### 11.1 Episode Statistics
+### 12.1 Episode Statistics
 
 | Metric | I2 — `img_mc_cells_substrates` | I1 — `img_mc_cells` | S3 — `spatial_scalars_cells` |
 |--------|:------------------------------:|:-------------------:|:----------------------------:|
@@ -477,7 +572,7 @@ The figure below shows a second matched episode (`run_000147`, seed 128, network
 | Peak dose per step | **0.834** | 0.563 | 0.496 |
 | Episode length | 480 steps | 480 steps | 480 steps |
 
-### 11.2 Panel-by-Panel Interpretation
+### 12.2 Panel-by-Panel Interpretation
 
 **Cumulative Return (top panel)**
 
@@ -504,7 +599,7 @@ Despite identical cumulative dose between I2 and S3, only I2 achieves a better f
 - **S3** applies doses more uniformly across the episode with moderate spikes, reflecting a spatial-centroid-based targeting strategy that lacks the precision of substrate gradient information.
 - **I1** produces sparse, low-amplitude pulses throughout with no sustained burst phase — confirming it has learned a fundamentally conservative policy that fails to commit drug resources at the critical moments.
 
-### 11.3 Comparison Between run\_000143 and run\_000147
+### 12.3 Comparison Between run\_000143 and run\_000147
 
 | | run\_000143 (seed 64) | run\_000147 (seed 128) |
 |---|:---:|:---:|
@@ -518,9 +613,9 @@ The contrast between these two episodes reveals that the state space advantage o
 
 ---
 
-## 12. W&B Training Curves & Observation Visualisations
+## 13. W&B Training Curves & Observation Visualisations
 
-### 12.1 Observation Mode Visualisation (I2 — `img_mc_cells_substrates`)
+### 13.1 Observation Mode Visualisation (I2 — `img_mc_cells_substrates`)
 
 The images below show the 8-channel image observation at six time steps of a single episode, illustrating what the best-performing agent actually sees.
 
@@ -549,7 +644,7 @@ For **S2** (`scalars_cells_substrates`) and **S4/S5** (scalar substrate extensio
 
 ---
 
-### 12.2 Training Curves — All Observation Modes (W&B panels)
+### 13.2 Training Curves — All Observation Modes (W&B panels)
 
 The panels below cover **all 7 observation modes** (S1–S5, I1, I2). Legend: **I2** `img_mc_cells_substrates` = red dashed; **I1** `img_mc_cells` = dark green; **S5** `spatial_scalars_cells_spatial_substrates` = green dot; **S3** `spatial_scalars_cells` = blue; **S4** `spatial_scalars_cells_substrates` = red solid; **S2** `scalars_cells_substrates` = cyan; **S1** `scalars_cells` = grey.
 
