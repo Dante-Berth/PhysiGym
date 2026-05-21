@@ -195,7 +195,7 @@ The wrapper additionally weights components:
 
 ## 4. State Spaces Compared
 
-Seven observation modes were evaluated. All scalar modes are **float32**; image modes are **uint8** grids of shape `(channels, 64, 64)`.
+Eight observation modes were evaluated (plus one new candidate, **C1**). All scalar modes are **float32**; image modes are **uint8** grids of shape `(channels, 64, 64)`.
 
 | ID | Observation Mode | Type | Shape | Description |
 |----|-----------------|------|-------|-------------|
@@ -205,7 +205,8 @@ Seven observation modes were evaluated. All scalar modes are **float32**; image 
 | **S4** | `spatial_scalars_cells_substrates` | scalar | `(27,)` | Cell counts + substrate scalars + cell spatial statistics |
 | **S5** | `spatial_scalars_cells_spatial_substrates` | scalar | `(39,)` | Cell counts + substrate scalars + spatial features for both cells and substrates |
 | **K1** | `kmeans_spatial_scalars_cells_substrates` | scalar | `(cell_types×6×k + substrates×6×k,)` | K-Means cluster descriptors for both cells and substrates (default k=3 → 144-dim) |
-| **R1** | `relational` | scalar | `(48,)` | Explicit pairwise inter-type distances & angles + substrate concentration at cell positions + substrate gradient direction toward tumor — see §10 |
+| **R1** | `relational` | scalar | `(62,)` | Explicit pairwise inter-type distances & angles + substrate concentration at cell positions + substrate gradient direction toward tumor — see §10 |
+| **C1** | `cross_nn_relational` | scalar | `(74,)` | R1 + cross-type nearest-neighbour distance statistics (mean + std per ordered pair) — see §11 |
 | **I1** | `img_mc_cells` | image | `(3, 64, 64)` | One channel per cell type: spatial density grid |
 | **I2** | `img_mc_cells_substrates` | image | `(6, 64, 64)` | Cell density grids + substrate concentration grids |
 
@@ -400,12 +401,14 @@ Image-based representations are **more robust to random initialization**, likely
 | Finding | Conclusion |
 |---------|-----------|
 | **Best overall state space** | `img_mc_cells_substrates` (6-channel image, 64×64) |
-| **Best scalar state space** | `spatial_scalars_cells` (21-dim), but high variance |
+| **Best scalar state space (tested)** | `spatial_scalars_cells` (21-dim), but high variance |
+| **Best scalar candidate (pending)** | `cross_nn_relational` (74-dim) — see §15 |
 | **Worst state spaces** | Pure global scalars: `scalars_cells`, `scalars_cells_substrates` |
 | **Image vs. scalar gap** | +71 points on train_mean50 (I2 vs S1), +39 on test_mean50 |
 | **Substrate info impact** | Critical: I2 outperforms I1 by ~27 pts train, ~36 pts test |
 | **Spatial features value** | Helpful for training (S3 > S1) but inconsistent on test |
-| **More is not always better** | S5 (39-dim) ≈ S5 (3-dim) due to optimization difficulty |
+| **More is not always better** | S5 (39-dim) ≈ S1 (3-dim) due to optimization difficulty |
+| **Expert features overfit** | K1 and R1 show large train/test gap; raw image generalises better |
 | **Seed robustness** | Image modes ~3–4× more consistent than scalar modes |
 
 ### Recommendation
@@ -416,7 +419,7 @@ For the PhysiCell TME task, **`img_mc_cells_substrates`** should be the default 
 3. Consistent performance across seeds
 4. Strong generalization to unseen spatial configurations (circular, rectangle test layouts)
 
-If compute is constrained and image processing overhead is a concern, **`spatial_scalars_cells`** is the best scalar alternative but requires more seeds to achieve reliable performance.
+If compute is constrained and image processing overhead is a concern, **`cross_nn_relational`** (C1, 74-dim) is the strongest scalar candidate: it combines R1's substrate-relative features with per-cell nearest-neighbour contact statistics that directly encode the cytotoxic coupling between T-cells and tumor cells — the primary mechanism missed by all previous scalar modes. Results pending. Fallback to **`spatial_scalars_cells`** if C1 does not outperform R1 in practice.
 
 ---
 
@@ -602,18 +605,19 @@ This 3×3 block encodes the **local biochemical environment of each cell populat
 
 ### 10.5 Comparison with Other State Spaces
 
-| | S3 (21-dim) | S5 (39-dim) | K1 (144-dim) | **R1 (48-dim)** | I2 (24,576-dim) |
-|---|---|---|---|---|---|
-| Per-type centroid & spread | ✓ | ✓ | ✓ (k blobs) | ✓ | implicit |
-| Pairwise inter-type distance | ✗ | ✗ | ✗ | **✓** | implicit |
-| Pairwise angle (tumor→immune) | ✗ | ✗ | ✗ | **✓** | implicit |
-| Substrate at tumor positions | ✗ | partial | partial | **✓** | ✓ |
-| Substrate gradient direction | ✗ | ✗ | ✗ | **✓** | implicit |
-| Each cell type's local substrate | ✗ | ✗ | ✗ | **✓** | implicit |
-| Multi-modal distributions | ✗ | ✗| ✓ | ✗ | ✓ |
-| Deterministic (no iteration) | ✓ | ✓ | ✗ | **✓** | ✓ |
-| Interpretable features | ✓ | partial | partial | **✓** | ✗ |
-| CNN required | ✗ | ✗ | ✗ | **✗** | ✓ |
+| | S3 (21-dim) | S5 (39-dim) | K1 (144-dim) | **R1 (62-dim)** | **C1 (74-dim)** | I2 (24,576-dim) |
+|---|---|---|---|---|---|---|
+| Per-type centroid & spread | ✓ | ✓ | ✓ (k blobs) | ✓ | ✓ | implicit |
+| Pairwise inter-type distance | ✗ | ✗ | ✗ | **✓** | ✓ | implicit |
+| Pairwise angle (tumor→immune) | ✗ | ✗ | ✗ | **✓** | ✓ | implicit |
+| Per-cell nearest-neighbour dist | ✗ | ✗ | ✗ | ✗ | **✓** | implicit |
+| Substrate at tumor positions | ✗ | partial | partial | **✓** | ✓ | ✓ |
+| Substrate gradient direction | ✗ | ✗ | ✗ | **✓** | ✓ | implicit |
+| Each cell type's local substrate | ✗ | ✗ | ✗ | **✓** | ✓ | implicit |
+| Multi-modal distributions | ✗ | ✗| ✓ | ✗ | ✗ | ✓ |
+| Deterministic (no iteration) | ✓ | ✓ | ✗ | **✓** | **✓** | ✓ |
+| Interpretable features | ✓ | partial | partial | **✓** | **✓** | ✗ |
+| CNN required | ✗ | ✗ | ✗ | **✗** | **✗** | ✓ |
 
 **R1's key advantage over all previous scalar modes** is the explicit encoding of *relationships between entities* — distances, angles, and cross-substrate exposures. These are exactly the features that the image CNN computes implicitly through local convolutional filters operating on multi-channel inputs. R1 makes them explicit so a plain MLP can access them without needing convolutions.
 
@@ -826,4 +830,103 @@ The smoothed view confirms **I2** as the dominant mode on test, steadily climbin
 ![test_return_std](../img/Section-2-Panel-4-q55wfb7fm.png)
 
 **I2** shows the highest test std across all modes — reflecting that it achieves very high returns on some episodes (near-eradication) and moderate returns on others. This is a sign of a capable but not yet fully robust policy, rather than instability. All scalar modes converge to low test std, consistent with conservative low-dose policies that produce predictable but modest outcomes.
+
+---
+
+## 15. Cross-NN Relational State Space — C1 (`cross_nn_relational`)
+
+### 15.1 Motivation and Core Insight
+
+All previous scalar modes — including the relational mode R1 — describe each biological entity **in isolation or through summary centroids**. R1's Block 2 computes the distance and angle *between centroids*, but the centroid distance is a **coarse aggregate**: two populations whose centroids are close may still have only a handful of cells in physical contact, while two populations with distant centroids may have a diffuse fringe of one infiltrating the other.
+
+The key spatial feature a CNN implicitly computes from a multi-channel image is **local co-presence**: at pixel (i, j), both channel A and channel B are non-zero → these populations are in physical contact at that location. The MLP cannot discover this from centroid features alone.
+
+The `cross_nn_relational` mode (C1) addresses this by adding **cross-type nearest-neighbour distance statistics** to R1. For every ordered pair of cell types (A, B), it computes for each A-cell: "how far is my nearest B-cell neighbour?" — and reports the mean and standard deviation of these per-cell distances across the entire A population.
+
+This is the minimal permutation-invariant statistic that captures **population-level infiltration depth** without requiring a CNN:
+- **Mean nearest-neighbour distance** (A→B) ≈ how close, on average, each A-cell is to its nearest B-cell — a direct measure of contact zone width
+- **Std of nearest-neighbour distances** (A→B) ≈ how uniform the infiltration is — low std means all A-cells are equally close (uniform infiltration); high std means some A-cells are tightly surrounded by B-cells while others are isolated
+
+### 15.2 Observation Vector Structure
+
+C1 = R1 concatenated with the cross-NN block:
+
+```
+R1 block (62 floats):
+  Block 1 — per-type absolute features      3 types × 5 = 15
+  Block 2 — per-pair relational features    3 pairs × 4 = 12
+  Block 3 — per-substrate, tumor-relative   5 subs  × 4 = 20
+  Block 4 — cross (cell type × substrate)   3 × 5   × 1 = 15
+
+Cross-NN block (12 floats):
+  For each ordered pair (A→B), A ≠ B:       3×2 pairs × 2 = 12
+    mean_nn_dist_A_to_B   (normalised by domain diagonal → [0, 1])
+    std_nn_dist_A_to_B    (normalised by domain diagonal → [0, 1])
+
+Total: 74 floats
+```
+
+The 6 ordered pairs are (tumor→t_cell), (tumor→macrophage), (t_cell→tumor), (t_cell→macrophage), (macrophage→tumor), (macrophage→t_cell). Note that (A→B) and (B→A) are **not symmetric**: the mean nearest-neighbour distance from tumor cells to T-cells is not the same as from T-cells to tumor cells when population sizes differ.
+
+### 15.3 Biological Interpretation of the Cross-NN Block
+
+| Pair (A→B) | Mean | Std | Biological meaning |
+|------------|------|-----|--------------------|
+| tumor → t_cell | low | low | All tumor cells are uniformly surrounded by T-cells → maximal cytotoxic pressure |
+| tumor → t_cell | low | high | Some tumor cells are T-cell-adjacent; others are isolated → incomplete infiltration, potential immune escape zones |
+| tumor → t_cell | high | any | T-cells are distant from tumor → cytokine-mediated killing is minimal |
+| t_cell → macrophage | low | low | T-cells are co-localised with macrophages → pro-tumoral factor secreted by M2 macrophages is directly suppressing T-cells |
+| macrophage → tumor | low | any | Macrophages are adjacent to tumor → polarisation drug will have maximum effect if delivered here |
+| t_cell → tumor | low | low | T-cells are engaged with tumor mass → drug should reinforce this configuration by protecting anti-tumoral gradients |
+
+### 15.4 Why This Closes the Gap with I2
+
+The IMPALA CNN applied to I2's 6-channel 64×64 input computes, via its first convolutional layer (8×8 kernel, stride 4), local cross-channel statistics across 8×8-pixel neighbourhoods. At 63 µm domain / 64 pixels ≈ 1 µm/pixel, an 8-pixel kernel covers ~8 µm — roughly one cell diameter. This is functionally equivalent to computing, for each spatial location, whether a tumor cell and a T-cell are within ~8 µm of each other.
+
+The cross-NN block computes the **global distribution** of these proximity events across the entire population, summarised as (mean, std). It cannot recover the spatial map of contact zones (multiple disconnected infiltration fronts, for instance), but it directly encodes the *quantity* and *uniformity* of physical contact between populations — which is the primary determinant of cytokine-mediated tumor killing in this model.
+
+### 15.5 Design Choices and Implementation
+
+| Choice | Rationale |
+|--------|-----------|
+| KDTree per cell type | `O(N log N)` construction, `O(N log M)` query — negligible vs. PhysiCell step |
+| Normalise by domain diagonal | All pairs on same [0, 1] scale; domain-size-invariant |
+| Ordered pairs (A→B ≠ B→A) | Population size asymmetry makes these informative separately: 1 tumor cell may have mean-NN-to-T-cell = 5 µm (small tumor, T-cells everywhere) while mean-NN-to-tumor from T-cells = 30 µm (many T-cells far from tumor mass) |
+| Absent type → 0.0 | If either population is empty, the pair contributes zero — unambiguous signal to the agent that contact is impossible |
+| Low = 0.0 bound on obs space | NN distances are non-negative; declared low=-1.0 in Box (same as R1) but runtime values are in [0, 1] — no clipping needed |
+
+**Computational cost:** With ≤ 512 alive cells and ≤ 6 ordered pairs, total KDTree queries ≤ 512 × 6 = 3,072 lookups. This is well under 1 ms per step, negligible relative to the PhysiCell simulation.
+
+**No new dependencies:** uses only `scipy.spatial.cKDTree`, already imported for R1.
+
+### 15.6 Comparison with All State Spaces
+
+| | S3 (21) | K1 (144) | R1 (62) | **C1 (74)** | I2 (24,576) |
+|---|---|---|---|---|---|
+| Per-type centroid & spread | ✓ | ✓ (k blobs) | ✓ | ✓ | implicit |
+| Pairwise inter-type distance (centroids) | ✗ | ✗ | ✓ | ✓ | implicit |
+| **Per-cell nearest-neighbour dist (mean)** | ✗ | ✗ | ✗ | **✓** | implicit |
+| **Per-cell nearest-neighbour dist (std)** | ✗ | ✗ | ✗ | **✓** | implicit |
+| Substrate at tumor positions | ✗ | partial | ✓ | ✓ | ✓ |
+| Substrate gradient direction | ✗ | ✗ | ✓ | ✓ | implicit |
+| Multi-modal distributions | ✗ | ✓ | ✗ | ✗ | ✓ |
+| Deterministic (no iteration) | ✓ | ✗ | ✓ | ✓ | ✓ |
+| CNN required | ✗ | ✗ | ✗ | **✗** | ✓ |
+| Interpretable | ✓ | partial | ✓ | **✓** | ✗ |
+
+C1's key addition over R1 is the shift from centroid-level to **cell-level spatial coupling**. R1 Block 2 answers "are the population centroids close?" — C1 answers "are the *cells themselves* close, and how uniformly?". These are orthogonally informative: a population pair can have close centroids but sparse cell-level contact (dispersed populations that overlap at their edges), or distant centroids but tight cell-level contact (two compact clusters with a thin interface).
+
+C1's remaining limitation relative to I2 is the **absence of spatial substrate topology**: C1 inherits R1's gradient-direction features (Block 3), which encode the direction toward the peak concentration zone but not the full substrate field. An agent using C1 still cannot distinguish a uniform drug distribution from a tightly localised hotspot, except through the gradient summary.
+
+### 15.7 Expected Positioning in Results
+
+Based on the design analysis:
+
+- **C1 should outperform R1**: the cross-NN block directly encodes the cytotoxic contact signal that R1 cannot represent. The most critical pair, tumor→t_cell mean-NN distance, is a near-direct proxy for the instantaneous cytokine-mediated killing rate.
+- **C1 should outperform all S and K modes**: S-modes lack both relational features and cross-NN statistics; K1 lacks cross-NN features and suffers from iterative instability.
+- **C1 should narrow the gap with I2 compared to R1**: by encoding cell-level contact geometry, C1 addresses the primary missing ingredient identified in §7 and §12–13. The remaining gap should come from complex substrate topology.
+- **C1 generalisation** should be stronger than R1: nearest-neighbour distances are coordinate-free (they depend only on inter-cell distances, not absolute positions), so they are fully invariant to the spatial layout geometry. This is a stronger invariance than R1's centroid-based features, which encode absolute centroid positions in Block 1.
+- **Seed stability** comparable to R1: compact, bounded 74-dim space with deterministic computation.
+
+Results for seeds (1, 64, 128) are pending and will be added to §6 once runs complete.
 
