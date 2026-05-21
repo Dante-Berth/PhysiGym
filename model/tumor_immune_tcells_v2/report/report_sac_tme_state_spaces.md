@@ -205,6 +205,7 @@ Seven observation modes were evaluated. All scalar modes are **float32**; image 
 | **S4** | `spatial_scalars_cells_substrates` | scalar | `(27,)` | Cell counts + substrate scalars + cell spatial statistics |
 | **S5** | `spatial_scalars_cells_spatial_substrates` | scalar | `(39,)` | Cell counts + substrate scalars + spatial features for both cells and substrates |
 | **K1** | `kmeans_spatial_scalars_cells_substrates` | scalar | `(cell_types×6×k + substrates×6×k,)` | K-Means cluster descriptors for both cells and substrates (default k=3 → 144-dim) |
+| **R1** | `relational` | scalar | `(48,)` | Explicit pairwise inter-type distances & angles + substrate concentration at cell positions + substrate gradient direction toward tumor — see §10 |
 | **I1** | `img_mc_cells` | image | `(3, 64, 64)` | One channel per cell type: spatial density grid |
 | **I2** | `img_mc_cells_substrates` | image | `(6, 64, 64)` | Cell density grids + substrate concentration grids |
 
@@ -497,11 +498,155 @@ K1 has not yet been included in the W&B comparison runs. Based on the design:
 
 ---
 
-## 10. Spatial Layout Examples
+## 10. Relational State Space — R1 (`relational`)
+
+### 10.1 Motivation
+
+The analysis in §7 and §9 identified a central limitation shared by all scalar modes (S1–S5) and the K-Means mode (K1): they describe each biological entity **in isolation**. S3 tells the agent where the tumor centroid is and where the T-cell centroid is — but not how far apart they are, whether T-cells are approaching the tumor from a productive direction, or whether the drug gradient is currently pointing toward the immunosuppressive zone. These **pairwise and cross-entity relationships** are precisely what the CNN extracts implicitly from the multi-channel image (I2), and they are the missing ingredient in scalar representations.
+
+The `relational` mode encodes these relationships explicitly, producing a compact **48-dimensional float32 vector** of features that all have a direct biological interpretation. Unlike K-Means (K1), it requires no iterative algorithm and produces the same deterministic output for the same simulation state, eliminating the instability described in §9.
+
+### 10.2 Design Rationale
+
+The representation is built around three biological questions that govern optimal drug delivery in this TME:
+
+1. **Where is the tumor mass, and how spread is it?** (absolute spatial context)
+2. **Where are immune cells relative to the tumor, and are they in a productive position?** (relational spatial context)
+3. **Is the drug reaching the tumor, and is the immunosuppressive gradient working against it?** (substrate-cell coupling)
+
+These three questions map directly onto the four feature blocks described below.
+
+### 10.3 Observation Vector Structure
+
+Total dimension: **48 floats**, all in `[−1, 1]` (positional features and count fractions in `[0, 1]`; angular features sin/cos in `[−1, 1]`).
+
+```
+Block 1: per-type absolute features        3 types × 5 features = 15
+Block 2: per-pair relational features      3 pairs × 4 features = 12
+Block 3: per-substrate, tumor-relative     3 substrates × 4 features = 12
+Block 4: cross (cell type × substrate)     3 types × 3 substrates × 1 feature = 9
+──────────────────────────────────────────────────────────────────────────────
+Total                                                              48
+```
+
+### 10.4 Feature Blocks in Detail
+
+#### Block 1 — Per Cell Type (15 features)
+
+For each cell type (tumor, t_cell, macrophage), 5 scalar features:
+
+| Feature | Symbol | Range | Biological meaning |
+|---------|--------|-------|--------------------|
+| Centroid x | `cx` | [0, 1] | Horizontal position of the cell population's centre of mass, normalised over the domain |
+| Centroid y | `cy` | [0, 1] | Vertical position of the centre of mass |
+| Spread x | `std_x` | [0, 1] | Standard deviation of cell x-positions, normalised by domain width — measures how dispersed the population is horizontally |
+| Spread y | `std_y` | [0, 1] | Same for vertical spread |
+| Count fraction | `cf` | [0, 1] | Fraction of total alive cells belonging to this type — e.g. `cf_tumor = n_tumor / n_total` |
+
+**Biological reading:** A tumor with `cx=0.7, cy=0.3, std_x=0.05, std_y=0.05` is a tightly packed cluster in the upper-right quadrant. A t_cell with `cx=0.3, cy=0.6, std_x=0.3, std_y=0.3` is a diffuse population spread across the lower-left. The agent immediately knows these two populations are far apart.
+
+**Empty type handling:** If a cell type is entirely absent (count = 0), its centroid defaults to `(0.5, 0.5)` (domain centre, a neutral position) and spread to `(0, 0)`, and `cf = 0`. This makes the representation well-defined at all times without requiring a separate presence flag.
+
+#### Block 2 — Per Cell-Type Pair (12 features)
+
+For each of the 3 ordered pairs — (tumor, t\_cell), (tumor, macrophage), (t\_cell, macrophage) — 4 scalar features:
+
+| Feature | Symbol | Range | Biological meaning |
+|---------|--------|-------|--------------------|
+| Centroid distance | `dist` | [0, 1] | Euclidean distance between the two type centroids, normalised by the diagonal of the unit square (`√2`) so 1.0 = maximum possible separation |
+| Angle (sine) | `sin_θ` | [−1, 1] | Sine of the direction from type-A centroid to type-B centroid |
+| Angle (cosine) | `cos_θ` | [−1, 1] | Cosine of the same direction — together (sin, cos) encode the full angle without the ±π discontinuity of a raw angle |
+| Quadrant overlap | `overlap` | [0, 1] | Fraction of type-A cells located in the same domain quadrant as the type-B centroid — a coarse measure of co-localisation |
+
+**Biological reading:** For the (tumor, t_cell) pair:
+- `dist` near 0 → T-cells are co-located with the tumor → active cytotoxic pressure is likely
+- `sin_θ, cos_θ` encode the direction from tumor to T-cells — the agent can correlate this with the drug delivery direction
+- `overlap` near 1 → most T-cells share a quadrant with the tumor mass → productive infiltration geometry
+
+**Why (sin, cos) instead of angle?** A raw angle θ in `[−π, π]` is discontinuous: θ = π and θ = −π are the same direction but numerically distant. Representing it as `(sin θ, cos θ)` avoids this discontinuity and is standard practice for angular features in neural networks.
+
+#### Block 3 — Per Substrate, Tumor-Relative (12 features)
+
+For each substrate (debris, pro-tumoral factor, anti-tumoral factor), 4 features measuring the substrate **relative to the tumor's spatial context**. Nearest-voxel lookup uses a KD-tree for efficiency (`O(N log M)` vs. brute-force `O(N×M)`).
+
+| Feature | Symbol | Range | Biological meaning |
+|---------|--------|-------|--------------------|
+| Concentration at tumor | `conc_tumor` | [0, 1] | Mean substrate concentration sampled at each tumor cell's position (nearest voxel) — how much of this substrate is the tumor actually experiencing? |
+| Gradient direction (sine) | `grad_sin` | [−1, 1] | Sine of the direction from the tumor centroid toward the substrate's highest-concentration zone (top 25% of voxels by concentration, weighted centroid) |
+| Gradient direction (cosine) | `grad_cos` | [−1, 1] | Cosine of the same gradient direction |
+| Mean concentration in spread | `mean_spread` | [0, 1] | Mean substrate concentration within one standard deviation of the tumor centroid — local exposure of the tumor neighbourhood to this substrate |
+
+**Biological reading for the anti-tumoral factor:**
+- `conc_tumor` ≈ 0 → the anti-tumoral factor is not reaching tumor cells, even if its global maximum is high → T-cells and macrophages have not yet re-polarised the local microenvironment
+- `grad_sin, grad_cos` pointing away from the tumor → the drug-driven anti-tumoral gradient is in the wrong direction; the agent should reposition the next injection
+- `mean_spread` high → the entire tumor neighbourhood is bathed in anti-tumoral factor → macrophages are likely M1-polarised locally → T-cells will be guided there → conditions for cytotoxic killing are met
+
+**Biological reading for the pro-tumoral factor:**
+- `conc_tumor` high → the tumor is sitting inside an immunosuppressive zone → T-cells are being repelled from this region → drug must be delivered here first
+- `grad_sin, grad_cos` → the immunosuppressive gradient is strongest in this direction from the tumor → high priority target for drug injection
+
+This block directly encodes the **closed-loop feedback** that §11.3 identified as the decisive advantage of I2 over I1: the agent can observe whether the drug is actually reaching and repolarising the tumor microenvironment, without requiring full spatial maps.
+
+#### Block 4 — Cross (Cell Type × Substrate) (9 features)
+
+For each combination of cell type (tumor, t_cell, macrophage) × substrate (debris, pro-tumoral, anti-tumoral), 1 feature:
+
+| Feature | Range | Biological meaning |
+|---------|-------|--------------------|
+| Mean substrate concentration at cell positions | [0, 1] | What concentration of this substrate are the cells of this type currently experiencing? |
+
+This 3×3 block encodes the **local biochemical environment of each cell population**:
+- `tumor × anti_tumoral` = are tumor cells being directly exposed to anti-tumoral factor? (proxy for whether nearby macrophages are M1-polarised)
+- `t_cell × pro_tumoral` = are T-cells swimming in immunosuppressive factor? (if high, T-cells are being chemically suppressed)
+- `macrophage × drug_1` = are macrophages being directly exposed to drug? (key for predicting whether the next phenotype step will polarise them toward M1)
+
+### 10.5 Comparison with Other State Spaces
+
+| | S3 (21-dim) | S5 (39-dim) | K1 (144-dim) | **R1 (48-dim)** | I2 (24,576-dim) |
+|---|---|---|---|---|---|
+| Per-type centroid & spread | ✓ | ✓ | ✓ (k blobs) | ✓ | implicit |
+| Pairwise inter-type distance | ✗ | ✗ | ✗ | **✓** | implicit |
+| Pairwise angle (tumor→immune) | ✗ | ✗ | ✗ | **✓** | implicit |
+| Substrate at tumor positions | ✗ | partial | partial | **✓** | ✓ |
+| Substrate gradient direction | ✗ | ✗ | ✗ | **✓** | implicit |
+| Each cell type's local substrate | ✗ | ✗ | ✗ | **✓** | implicit |
+| Multi-modal distributions | ✗ | ✗| ✓ | ✗ | ✓ |
+| Deterministic (no iteration) | ✓ | ✓ | ✗ | **✓** | ✓ |
+| Interpretable features | ✓ | partial | partial | **✓** | ✗ |
+| CNN required | ✗ | ✗ | ✗ | **✗** | ✓ |
+
+**R1's key advantage over all previous scalar modes** is the explicit encoding of *relationships between entities* — distances, angles, and cross-substrate exposures. These are exactly the features that the image CNN computes implicitly through local convolutional filters operating on multi-channel inputs. R1 makes them explicit so a plain MLP can access them without needing convolutions.
+
+**R1's limitation vs. K1:** R1 uses a single centroid per cell type and cannot represent bimodal or multi-cluster distributions. If the tumor splits into two distant masses, R1 sees only their average centroid — misleading. K1 would represent each mass as a separate cluster. However, in this TME (where tumor cells are immobile and start from a single spatial distribution), multi-modal tumor distributions are less common than in systems with active migration.
+
+**R1's limitation vs. I2:** R1 cannot represent fine-grained spatial gradients or complex substrate topology. The gradient direction features (Block 3) capture the direction of the peak concentration zone but not the full gradient field. An agent relying on R1 may still misplace drug injections in complex substrate landscape configurations.
+
+### 10.6 Expected Positioning in Results
+
+Based on the design analysis and the mechanisms identified in §7 and §11:
+
+- **R1 should outperform all S-modes (S1–S5):** The explicit pairwise features and substrate-at-tumor signals directly address the credit assignment problem that limits scalar modes. The agent no longer needs to infer spatial relationships from centroid positions alone.
+- **R1 should outperform K1:** K1's cluster descriptors are informationally similar to R1's Block 1, but K1 lacks pairwise relational features (Block 2) and the substrate-relative features (Blocks 3–4). K1 also suffers from iterative instability.
+- **R1 should narrow the gap with I2** on training return, particularly in the critical final phase of an episode (steps 300–480 in run\_000143 §11) where substrate gradient information guides the last drug injections toward eradication.
+- **R1's generalisation (rectangle, circular layouts)** is an open question: the relational features are layout-agnostic (they encode distances and angles, not absolute positions), so R1 may generalise better than S3 to novel spatial configurations. However, without substrate gradient topology, the agent may still struggle on asymmetric or elongated test geometries.
+- **Seed stability** should improve relative to S3/S4/S5: the 48-dim space is compact and all features are bounded, reducing the optimisation variability that caused high seed variance in higher-dimensional scalar modes.
+
+Results for 3 seeds (1, 64, 128) are in progress and will be added to §6 and the per-seed breakdown tables once the runs complete.
+
+### 10.7 Implementation Notes
+
+- **No new dependencies**: uses only `numpy`, `scipy.spatial.cKDTree` (already in the environment), and `pandas`.
+- **Computational cost**: `O(N_cells log M_voxels)` per step for the KD-tree lookups in Blocks 3–4, where `N_cells` is the number of alive cells (≤ 512) and `M_voxels` is the number of substrate voxels (≤ 3,969 for a 63×63 grid). This is negligible compared to the PhysiCell simulation step itself.
+- **Observation space bounds**: declared as `Box(low=-1.0, high=1.0, shape=(48,), dtype=float32)`. Count fractions and concentration values are in `[0, 1]`; angular features (sin/cos) are in `[-1, 1]`. No clipping is applied at runtime since all values are bounded by construction.
+- **Policy architecture**: standard MLP (FC 256 → Mish → FC 256 → Mish) shared with all scalar modes. No architectural change required.
+
+---
+
+## 11. Spatial Layout Examples
 
 The figures below show representative initial cell configurations for each evaluation regime.
 
-### 10.1 Test Layouts (held-out, never seen during training)
+### 11.1 Test Layouts (held-out, never seen during training)
 
 ![Spatial layouts overview](figures/fig_layouts.png)
 
@@ -510,14 +655,14 @@ The figure shows all four layouts side-by-side. Test layouts (rectangle, circula
 
 ---
 
-## 11. Episode Comparison — run\_000143
+## 12. Episode Comparison — run\_000143
 
 The figure below compares a single matched episode (step 143 of the test rollout, network-field layout) across the three best-performing state spaces: **I2** (`img_mc_cells_substrates`), **I1** (`img_mc_cells`), and **S3** (`spatial_scalars_cells`).
 
 ![Episode comparison](figures/fig_episode_comparison.png)
 
 
-### 11.1 Episode Statistics
+### 12.1 Episode Statistics
 
 | Metric | I2 — `img_mc_cells_substrates` | I1 — `img_mc_cells` | S3 — `spatial_scalars_cells` |
 |--------|:------------------------------:|:-------------------:|:----------------------------:|
@@ -527,7 +672,7 @@ The figure below compares a single matched episode (step 143 of the test rollout
 | Peak dose per step | 0.813 | 0.451 | 0.484 |
 | Episode length | 480 steps | 480 steps | 480 steps |
 
-### 11.2 Panel-by-Panel Interpretation
+### 12.2 Panel-by-Panel Interpretation
 
 **Cumulative Return (top panel)**
 
@@ -543,7 +688,7 @@ I2 and S3 both apply significantly more drug (35.4 and 31.1 cumulative dose unit
 
 All three agents show high variance in per-step dosing, consistent with the stochastic nature of the SAC policy and the spatially heterogeneous tumour environment. I2 shows pronounced late-episode spikes (steps 300–480), corresponding to the final push toward eradication (tumor count approaching the termination threshold of ≤3). I1 shows sparse, low-magnitude pulses throughout, with no concentrated effort. S3 distributes dosing more evenly, suggesting a less spatially-targeted strategy that nevertheless achieves partial tumour control.
 
-### 11.3 Why I2 Succeeds Where I1 Fails
+### 12.3 Why I2 Succeeds Where I1 Fails
 
 This single episode illustrates the key argument of the report in concrete terms:
 
@@ -555,13 +700,13 @@ This single episode illustrates the key argument of the report in concrete terms
 
 ---
 
-## 12. Episode Comparison — run\_000147 (seed 128)
+## 13. Episode Comparison — run\_000147 (seed 128)
 
 The figure below shows a second matched episode (`run_000147`, seed 128, network-field training layout) comparing the same three state spaces. This episode is harder than run\_000143: no agent achieves near-eradication, and all three exhibit a **return rollback** in the second half of the episode.
 
 ![Episode comparison 2](figures/fig_episode_comparison_2.png)
 
-### 12.1 Episode Statistics
+### 13.1 Episode Statistics
 
 | Metric | I2 — `img_mc_cells_substrates` | I1 — `img_mc_cells` | S3 — `spatial_scalars_cells` |
 |--------|:------------------------------:|:-------------------:|:----------------------------:|
@@ -572,7 +717,7 @@ The figure below shows a second matched episode (`run_000147`, seed 128, network
 | Peak dose per step | **0.834** | 0.563 | 0.496 |
 | Episode length | 480 steps | 480 steps | 480 steps |
 
-### 12.2 Panel-by-Panel Interpretation
+### 13.2 Panel-by-Panel Interpretation
 
 **Cumulative Return (top panel)**
 
@@ -599,7 +744,7 @@ Despite identical cumulative dose between I2 and S3, only I2 achieves a better f
 - **S3** applies doses more uniformly across the episode with moderate spikes, reflecting a spatial-centroid-based targeting strategy that lacks the precision of substrate gradient information.
 - **I1** produces sparse, low-amplitude pulses throughout with no sustained burst phase — confirming it has learned a fundamentally conservative policy that fails to commit drug resources at the critical moments.
 
-### 12.3 Comparison Between run\_000143 and run\_000147
+### 13.3 Comparison Between run\_000143 and run\_000147
 
 | | run\_000143 (seed 64) | run\_000147 (seed 128) |
 |---|:---:|:---:|
@@ -613,9 +758,9 @@ The contrast between these two episodes reveals that the state space advantage o
 
 ---
 
-## 13. W&B Training Curves & Observation Visualisations
+## 14. W&B Training Curves & Observation Visualisations
 
-### 13.1 Observation Mode Visualisation (I2 — `img_mc_cells_substrates`)
+### 14.1 Observation Mode Visualisation (I2 — `img_mc_cells_substrates`)
 
 The images below show the 8-channel image observation at six time steps of a single episode, illustrating what the best-performing agent actually sees.
 
@@ -644,7 +789,7 @@ For **S2** (`scalars_cells_substrates`) and **S4/S5** (scalar substrate extensio
 
 ---
 
-### 13.2 Training Curves — All Observation Modes (W&B panels)
+### 14.2 Training Curves — All Observation Modes (W&B panels)
 
 The panels below cover **all 7 observation modes** (S1–S5, I1, I2). Legend: **I2** `img_mc_cells_substrates` = red dashed; **I1** `img_mc_cells` = dark green; **S5** `spatial_scalars_cells_spatial_substrates` = green dot; **S3** `spatial_scalars_cells` = blue; **S4** `spatial_scalars_cells_substrates` = red solid; **S2** `scalars_cells_substrates` = cyan; **S1** `scalars_cells` = grey.
 
