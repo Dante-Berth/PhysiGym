@@ -710,40 +710,18 @@ The figure and videos below show a second matched episode (`run_000147`, seed 12
 
 ![Episode comparison 2](figures/fig_episode_comparison_2.png)
 
-### Episode Videos — run\_000147 (side-by-side)
+### Episode Videos — run\_000147
 
-<video controls width="100%" style="max-width:1200px">
-  <source src="videos/comparison_I2_I1_S3_run000147.mp4" type="video/mp4">
-</video>
+> GitHub does not render `<video>` tags — click the links below to download or play the `.mp4` files directly.
 
-*Left: I2 `img_mc_cells_substrates` — Centre: I1 `img_mc_cells` — Right: S3 `spatial_scalars_cells`.  All three agents running in the same PhysiCell environment from the same initial conditions.*
+| Agent | Video |
+|-------|-------|
+| **Side-by-side (I2 / I1 / S3)** | [comparison\_I2\_I1\_S3\_run000147.mp4](https://raw.githubusercontent.com/Dante-Berth/PhysiGym/main/model/tumor_immune_tcells_v2/report/videos/comparison_I2_I1_S3_run000147.mp4) |
+| I2 — `img_mc_cells_substrates` | [I2\_img\_mc\_cells\_substrates\_run000147.mp4](https://raw.githubusercontent.com/Dante-Berth/PhysiGym/main/model/tumor_immune_tcells_v2/report/videos/I2_img_mc_cells_substrates_run000147.mp4) |
+| I1 — `img_mc_cells` | [I1\_img\_mc\_cells\_run000147.mp4](https://raw.githubusercontent.com/Dante-Berth/PhysiGym/main/model/tumor_immune_tcells_v2/report/videos/I1_img_mc_cells_run000147.mp4) |
+| S3 — `spatial_scalars_cells` | [S3\_scalars\_cells\_run000147.mp4](https://raw.githubusercontent.com/Dante-Berth/PhysiGym/main/model/tumor_immune_tcells_v2/report/videos/S3_scalars_cells_run000147.mp4) |
 
-**Individual videos:**
-
-<table>
-<tr>
-<td align="center"><b>I2 — img_mc_cells_substrates</b></td>
-<td align="center"><b>I1 — img_mc_cells</b></td>
-<td align="center"><b>S3 — spatial_scalars_cells</b></td>
-</tr>
-<tr>
-<td>
-<video controls width="100%">
-  <source src="videos/I2_img_mc_cells_substrates_run000147.mp4" type="video/mp4">
-</video>
-</td>
-<td>
-<video controls width="100%">
-  <source src="videos/I1_img_mc_cells_run000147.mp4" type="video/mp4">
-</video>
-</td>
-<td>
-<video controls width="100%">
-  <source src="videos/S3_scalars_cells_run000147.mp4" type="video/mp4">
-</video>
-</td>
-</tr>
-</table>
+*Left panel of the side-by-side: I2 `img_mc_cells_substrates` — Centre: I1 `img_mc_cells` — Right: S3 `spatial_scalars_cells`. All three agents run from the same initial conditions (seed 128, network-field layout).*
 
 ### 13.1 Episode Statistics
 
