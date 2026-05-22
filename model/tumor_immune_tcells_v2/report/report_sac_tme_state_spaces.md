@@ -706,9 +706,44 @@ This single episode illustrates the key argument of the report in concrete terms
 
 ## 13. Episode Comparison — run\_000147 (seed 128)
 
-The figure below shows a second matched episode (`run_000147`, seed 128, network-field training layout) comparing the same three state spaces. This episode is harder than run\_000143: no agent achieves near-eradication, and all three exhibit a **return rollback** in the second half of the episode.
+The figure and videos below show a second matched episode (`run_000147`, seed 128, network-field training layout) comparing the same three state spaces. This episode is harder than run\_000143: no agent achieves near-eradication, and all three exhibit a **return rollback** in the second half of the episode.
 
 ![Episode comparison 2](figures/fig_episode_comparison_2.png)
+
+### Episode Videos — run\_000147 (side-by-side)
+
+<video controls width="100%" style="max-width:1200px">
+  <source src="videos/comparison_I2_I1_S3_run000147.mp4" type="video/mp4">
+</video>
+
+*Left: I2 `img_mc_cells_substrates` — Centre: I1 `img_mc_cells` — Right: S3 `spatial_scalars_cells`.  All three agents running in the same PhysiCell environment from the same initial conditions.*
+
+**Individual videos:**
+
+<table>
+<tr>
+<td align="center"><b>I2 — img_mc_cells_substrates</b></td>
+<td align="center"><b>I1 — img_mc_cells</b></td>
+<td align="center"><b>S3 — spatial_scalars_cells</b></td>
+</tr>
+<tr>
+<td>
+<video controls width="100%">
+  <source src="videos/I2_img_mc_cells_substrates_run000147.mp4" type="video/mp4">
+</video>
+</td>
+<td>
+<video controls width="100%">
+  <source src="videos/I1_img_mc_cells_run000147.mp4" type="video/mp4">
+</video>
+</td>
+<td>
+<video controls width="100%">
+  <source src="videos/S3_scalars_cells_run000147.mp4" type="video/mp4">
+</video>
+</td>
+</tr>
+</table>
 
 ### 13.1 Episode Statistics
 
