@@ -50,7 +50,7 @@ Cells are loaded from `config/cells.csv` at episode start (overridden by the spa
 
 ### 2.3 Cell Types
 
-#### Tumor (`ID=0`, red)
+#### Tumor (`ID=0`)
 
 | Property | Value |
 |----------|-------|
@@ -62,7 +62,7 @@ Cells are loaded from `config/cells.csv` at episode start (overridden by the spa
 
 Tumor cells grow via continuous cycling (live-cycle model, code 5). Their growth rate `λ = 2.99×10⁻⁴ /min` is used directly in the reward normalisation. They have no motility and continuously secrete `tumor_molecule`, creating a spatial danger-signal gradient.
 
-#### T-cell (`ID=1`, blue)
+#### T-cell (`ID=1`)
 
 | Property | Value |
 |----------|-------|
@@ -90,7 +90,7 @@ Tumor cells grow via continuous cycling (live-cycle model, code 5). Their growth
 
 T-cells secrete `cytokine`, which in turn triggers tumor apoptosis (see cell rules below).
 
-#### Macrophage (`ID=2`, green)
+#### Macrophage (`ID=2`)
 
 | Property | Value |
 |----------|-------|
@@ -208,7 +208,7 @@ Eight observation modes were evaluated (plus one new candidate, **C1**). All sca
 | **R1** | `relational` | scalar | `(62,)` | Explicit pairwise inter-type distances & angles + substrate concentration at cell positions + substrate gradient direction toward tumor — see §10 |
 | **C1** | `cross_nn_relational` | scalar | `(74,)` | R1 + cross-type nearest-neighbour distance statistics (mean + std per ordered pair) — see §11 |
 | **I1** | `img_mc_cells` | image | `(3, 64, 64)` | One channel per cell type: spatial density grid |
-| **I2** | `img_mc_cells_substrates` | image | `(6, 64, 64)` | Cell density grids + substrate concentration grids |
+| **I2** | `img_mc_cells_substrates` | image | `(8, 64, 64)` | Cell density grids + all 5 substrate concentration grids |
 
 ### Feature Detail
 
@@ -789,18 +789,18 @@ The images below show the 8-channel image observation at six time steps of a sin
 |---------|---------|----------|
 | ![obs60](../img/observation_60.png) | ![obs80](../img/observation_80.png) | ![obs100](../img/observation_100.png) |
 
-Each image has 8 channels (shown as separate panels): **CH 0–2** = tumor, T-cell, macrophage density grids; **CH 3–5** = anti\_tumoral\_factor, pro\_tumoral\_factor, drug\_1 concentration maps; **CH 6–7** = tumor\_molecule, cytokine maps.
+Each image has 8 channels (shown as separate panels): **CH 0–2** = tumor, T-cell, macrophage density grids; **CH 3–7** = anti\_tumoral\_factor, pro\_tumoral\_factor, drug\_1, tumor\_molecule, cytokine concentration maps. All 5 substrates are included.
 
 **Key observation per state space:**
 
 | State space | What the agent sees | What is missing |
 |-------------|--------------------|--------------------|
-| **I2** `img_mc_cells_substrates` (6ch, 64×64) | Full spatial layout of all 3 cell types + anti\_tumoral, pro\_tumoral, drug\_1 concentration maps | tumor\_molecule, cytokine (channels 6–7 not included) |
+| **I2** `img_mc_cells_substrates` (8ch, 64×64) | Full spatial layout of all 3 cell types + all 5 substrate concentration maps (anti\_tumoral, pro\_tumoral, drug\_1, tumor\_molecule, cytokine) | Nothing — full spatial state |
 | **I1** `img_mc_cells` (3ch, 64×64) | Spatial layout of tumor, T-cell, macrophage only | All substrate maps — no feedback on drug spread or immune gradients |
 | **S3** `spatial_scalars_cells` (21-dim) | Per cell type: presence flag, x\_mean, y\_mean, x\_std, y\_std, dist\_to\_center | All substrate information; spatial resolution limited to centroid/spread summary |
 | **S1** `scalars_cells` (3-dim) | Normalised alive count per cell type only | Spatial structure, substrate gradients — minimal signal |
 
-The substrate channels (CH 3–5) are crucial: **CH 4** (`pro_tumoral_factor`) shows where the immunosuppressive gradient is strongest — exactly where the agent must deliver drug to repolarise macrophages. Without this, I1 and S1 agents cannot close the feedback loop between dosing and macrophage repolarisation.
+The substrate channels (CH 3–7) are crucial: **CH 4** (`pro_tumoral_factor`) shows where the immunosuppressive gradient is strongest — exactly where the agent must deliver drug to repolarise macrophages. Without this, I1 and S1 agents cannot close the feedback loop between dosing and macrophage repolarisation.
 
 For **S2** (`scalars_cells_substrates`) and **S4/S5** (scalar substrate extensions): adding `max(concentration)` per substrate introduces a single scalar per substrate — this is dominated by the global peak and adds noise rather than spatial signal, explaining why S2 performs worse than S1 and S4/S5 do not outperform S3.
 
