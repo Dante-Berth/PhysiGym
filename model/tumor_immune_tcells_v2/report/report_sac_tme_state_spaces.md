@@ -775,9 +775,62 @@ The contrast between these two episodes reveals that the state space advantage o
 
 ---
 
-## 14. W&B Training Curves & Observation Visualisations
+## 14. Episode Comparison — run\_000131 (seed 1)
 
-### 14.1 Observation Mode Visualisation (I2 — `img_mc_cells_substrates`)
+A third matched episode (`run_000131`, seed 1, network-field layout) comparing I1, I2, and S3. This episode is notable because **all three agents run for the full 480 steps** (no early termination), making it a clean head-to-head comparison of sustained tumour control.
+
+![Episode comparison 3](figures/fig_episode_comparison_3.png)
+
+### 14.1 Episode Statistics
+
+| Metric | I2 — `img_mc_cells_substrates` | I1 — `img_mc_cells` | S3 — `spatial_scalars_cells` |
+|--------|:------------------------------:|:-------------------:|:----------------------------:|
+| Final tumor count | **16** | 20 | 52 |
+| Cumulative return | **+106.6** | +89.2 | −42.1 |
+| Cumulative dose used | **16.54** | 24.00 | 92.65 |
+| Peak dose per step | 0.627 | 0.829 | 0.678 |
+| Episode length | 480 steps | 480 steps | 480 steps |
+
+### 14.2 Key Observations
+
+**Cumulative Return (top panel)**
+
+I2 leads throughout (+106.6 final), with I1 close behind (+89.2). Both image modes achieve sustained positive returns. **S3 collapses to −42.1** — the scalar spatial-cells agent fails entirely in this episode, accumulating increasingly negative rewards as the tumour grows despite heavy dosing.
+
+**Cumulative Drug Used (middle panel)**
+
+The most striking result: S3 uses **92.65 cumulative dose units** — over 5× more than I2 (16.54) and nearly 4× more than I1 (24.00) — yet achieves the worst outcome. This is a textbook case of **blind overdosing**: without substrate spatial information the agent cannot tell whether the drug is reaching the macrophages, so it compensates by injecting more. I2 achieves the best tumour control with the least drug, confirming that spatial substrate feedback enables *precision* targeting, not just more aggressive dosing.
+
+**Drug Dose per Step (bottom panel)**
+
+I2 and I1 both show burst-pattern dosing with moderate peak doses. S3 shows nearly continuous high-dose application throughout the entire episode — consistent with a policy that has no spatial feedback signal and defaults to maximum dosing as a heuristic.
+
+### 14.3 Episode Video — run\_000131
+
+| Agent | Video |
+|-------|-------|
+| **Side-by-side (I1 / I2 / S3)** | [comparison\_I1\_I2\_S3\_run000131.mp4](https://raw.githubusercontent.com/Dante-Berth/PhysiGym/main/model/tumor_immune_tcells_v2/report/videos/comparison_I1_I2_S3_run000131.mp4) |
+| I1 — `img_mc_cells` | [TME\_V2\_1\_img\_mc\_cells — run\_000131](https://raw.githubusercontent.com/Dante-Berth/PhysiGym/main/model/tumor_immune_tcells_v2/report/videos/comparison_I1_I2_S3_run000131.mp4) |
+
+### 14.4 Three-Episode Summary
+
+| | run\_000143 (seed 64) | run\_000147 (seed 128) | run\_000131 (seed 1) |
+|---|:---:|:---:|:---:|
+| I2 final tumor | **4** (near-eradication) | 31 (rebound) | **16** |
+| I2 cumulative return | +175.1 | +53.4 | **+106.6** |
+| I1 final tumor | 112 | 64 | 20 |
+| I1 cumulative return | −7.4 | +35.0 | +89.2 |
+| S3 final tumor | 14 | 43 | 52 |
+| S3 cumulative return | +106.3 | +32.3 | **−42.1** |
+| Dominant failure mode | I1 under-medicates | All agents rebound | S3 overdoses blindly |
+
+Across all three episodes, **I2 consistently achieves the best final tumour count and cumulative return**. The failure modes differ: I1 under-medicates (no substrate feedback → conservative policy), S3 either over-doses blindly (run\_000131) or achieves partial control that cannot sustain (run\_000143/147). I2's substrate channels close both failure modes simultaneously — the agent knows *where* to inject (from substrate maps) and *whether* the injection worked (from feedback in the next observation).
+
+---
+
+## 16. W&B Training Curves & Observation Visualisations
+
+### 16.1 Observation Mode Visualisation (I2 — `img_mc_cells_substrates`)
 
 The images below show the 8-channel image observation at six time steps of a single episode, illustrating what the best-performing agent actually sees.
 
@@ -806,7 +859,7 @@ For **S2** (`scalars_cells_substrates`) and **S4/S5** (scalar substrate extensio
 
 ---
 
-### 14.2 Training Curves — All Observation Modes (W&B panels)
+### 16.2 Training Curves — All Observation Modes (W&B panels)
 
 The panels below cover **all 7 observation modes** (S1–S5, I1, I2). Legend: **I2** `img_mc_cells_substrates` = red dashed; **I1** `img_mc_cells` = dark green; **S5** `spatial_scalars_cells_spatial_substrates` = green dot; **S3** `spatial_scalars_cells` = blue; **S4** `spatial_scalars_cells_substrates` = red solid; **S2** `scalars_cells_substrates` = cyan; **S1** `scalars_cells` = grey.
 
@@ -846,9 +899,9 @@ The smoothed view confirms **I2** as the dominant mode on test, steadily climbin
 
 ---
 
-## 15. Cross-NN Relational State Space — C1 (`cross_nn_relational`)
+## 17. Cross-NN Relational State Space — C1 (`cross_nn_relational`)
 
-### 15.1 Motivation and Core Insight
+### 17.1 Motivation and Core Insight
 
 All previous scalar modes — including the relational mode R1 — describe each biological entity **in isolation or through summary centroids**. R1's Block 2 computes the distance and angle *between centroids*, but the centroid distance is a **coarse aggregate**: two populations whose centroids are close may still have only a handful of cells in physical contact, while two populations with distant centroids may have a diffuse fringe of one infiltrating the other.
 
@@ -860,7 +913,7 @@ This is the minimal permutation-invariant statistic that captures **population-l
 - **Mean nearest-neighbour distance** (A→B) ≈ how close, on average, each A-cell is to its nearest B-cell — a direct measure of contact zone width
 - **Std of nearest-neighbour distances** (A→B) ≈ how uniform the infiltration is — low std means all A-cells are equally close (uniform infiltration); high std means some A-cells are tightly surrounded by B-cells while others are isolated
 
-### 15.2 Observation Vector Structure
+### 17.2 Observation Vector Structure
 
 C1 = R1 concatenated with the cross-NN block:
 
@@ -881,7 +934,7 @@ Total: 74 floats
 
 The 6 ordered pairs are (tumor→t_cell), (tumor→macrophage), (t_cell→tumor), (t_cell→macrophage), (macrophage→tumor), (macrophage→t_cell). Note that (A→B) and (B→A) are **not symmetric**: the mean nearest-neighbour distance from tumor cells to T-cells is not the same as from T-cells to tumor cells when population sizes differ.
 
-### 15.3 Biological Interpretation of the Cross-NN Block
+### 17.3 Biological Interpretation of the Cross-NN Block
 
 | Pair (A→B) | Mean | Std | Biological meaning |
 |------------|------|-----|--------------------|
@@ -892,13 +945,13 @@ The 6 ordered pairs are (tumor→t_cell), (tumor→macrophage), (t_cell→tumor)
 | macrophage → tumor | low | any | Macrophages are adjacent to tumor → polarisation drug will have maximum effect if delivered here |
 | t_cell → tumor | low | low | T-cells are engaged with tumor mass → drug should reinforce this configuration by protecting anti-tumoral gradients |
 
-### 15.4 Why This Closes the Gap with I2
+### 17.4 Why This Closes the Gap with I2
 
 The IMPALA CNN applied to I2's 6-channel 64×64 input computes, via its first convolutional layer (8×8 kernel, stride 4), local cross-channel statistics across 8×8-pixel neighbourhoods. At 63 µm domain / 64 pixels ≈ 1 µm/pixel, an 8-pixel kernel covers ~8 µm — roughly one cell diameter. This is functionally equivalent to computing, for each spatial location, whether a tumor cell and a T-cell are within ~8 µm of each other.
 
 The cross-NN block computes the **global distribution** of these proximity events across the entire population, summarised as (mean, std). It cannot recover the spatial map of contact zones (multiple disconnected infiltration fronts, for instance), but it directly encodes the *quantity* and *uniformity* of physical contact between populations — which is the primary determinant of cytokine-mediated tumor killing in this model.
 
-### 15.5 Design Choices and Implementation
+### 17.5 Design Choices and Implementation
 
 | Choice | Rationale |
 |--------|-----------|
@@ -912,7 +965,7 @@ The cross-NN block computes the **global distribution** of these proximity event
 
 **No new dependencies:** uses only `scipy.spatial.cKDTree`, already imported for R1.
 
-### 15.6 Comparison with All State Spaces
+### 17.6 Comparison with All State Spaces
 
 | | S3 (21) | K1 (144) | R1 (62) | **C1 (74)** | I2 (24,576) |
 |---|---|---|---|---|---|
@@ -931,7 +984,7 @@ C1's key addition over R1 is the shift from centroid-level to **cell-level spati
 
 C1's remaining limitation relative to I2 is the **absence of spatial substrate topology**: C1 inherits R1's gradient-direction features (Block 3), which encode the direction toward the peak concentration zone but not the full substrate field. An agent using C1 still cannot distinguish a uniform drug distribution from a tightly localised hotspot, except through the gradient summary.
 
-### 15.7 Expected Positioning in Results
+### 17.7 Expected Positioning in Results
 
 Based on the design analysis:
 
