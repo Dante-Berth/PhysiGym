@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 import shutil
-from init_conds import generate_initial_condition
+from init_conds_v3 import generate_initial_condition
 from pathlib import Path
 
 
@@ -12,17 +12,11 @@ from pathlib import Path
 # Wrapper: PhysiCellModelWrapper
 # ============================================================
 
-
 class PhysiCellModelWrapper(gym.Wrapper):
     def __init__(
         self,
         env: gym.Env,
-        list_variable_name: list[str] = [
-            "drug_1_dose",
-            "drug_1_x",
-            "drug_1_y",
-            "drug_1_radius",
-        ],
+        list_variable_name: list[str] = ["drug_1_dose", "drug_1_x", "drug_1_y", "drug_1_radius"],
         w_cell=0.5,
         frequence_episode_test=3,
     ):
@@ -44,11 +38,10 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.list_variable_name = list_variable_name
 
         # ── Action space ────────────────────────────────────────
-        low = np.array([env.action_space[v].low[0] for v in list_variable_name])
+        low  = np.array([env.action_space[v].low[0]  for v in list_variable_name])
         high = np.array([env.action_space[v].high[0] for v in list_variable_name])
         self._action_space = Box(
-            low=low,
-            high=high,
+            low=low, high=high,
             dtype=env.action_space[list_variable_name[0]].dtype,
         )
 
@@ -56,33 +49,27 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
         # ── Paths ────────────────────────────────────────────────
         x_root = self.env.get_wrapper_attr("x_root")
-        self.cell_positions_folder = x_root.xpath(
-            "//initial_conditions/cell_positions/folder"
-        )[0].text
-        self.cell_name_file = x_root.xpath(
-            "//initial_conditions/cell_positions/filename"
-        )[0].text
-        self.csv_path_init = os.path.join(
-            self.cell_positions_folder, self.cell_name_file
-        )
-        self.base_output_dir = x_root.xpath("//save/folder")[0].text
-        self.settingxml = self.env.get_wrapper_attr("settingxml")
-        self.dt_gym = float(x_root.xpath("//user_parameters/dt_gym")[0].text)
-        self.seed_val = int(x_root.xpath("//random_seed")[0].text)
+        self.cell_positions_folder = x_root.xpath("//initial_conditions/cell_positions/folder")[0].text
+        self.cell_name_file        = x_root.xpath("//initial_conditions/cell_positions/filename")[0].text
+        self.csv_path_init         = os.path.join(self.cell_positions_folder, self.cell_name_file)
+        self.base_output_dir       = x_root.xpath("//save/folder")[0].text
+        self.settingxml            = self.env.get_wrapper_attr("settingxml")
+        self.dt_gym                = float(x_root.xpath("//user_parameters/dt_gym")[0].text)
+        self.seed_val              = int(x_root.xpath("//random_seed")[0].text)
 
         os.makedirs(self.base_output_dir, exist_ok=True)
 
         # ── Episode state ────────────────────────────────────────
-        self.list_data = []
-        self.generation_cfg = None  # set on first initial_condition_generation()
-        self.no_generation_cfg = None
+        self.list_data            = []
+        self.generation_cfg       = None   # set on first initial_condition_generation()
+        self.no_generation_cfg    = None
         self.generate_physicell_data = False
-        self.dataset_name = "default"
+        self.dataset_name         = "default"
 
         # ── Mode tracking ────────────────────────────────────────
-        self.mode = "train"  # "train" | "test"
-        self.type_mode = "init"  # geometry used this episode
-        self._test_mode_idx = 0  # rotates through mode_test pool
+        self.mode                 = "train"   # "train" | "test"
+        self.type_mode            = "init"    # geometry used this episode
+        self._test_mode_idx       = 0         # rotates through mode_test pool
         self.frequence_episode_test = frequence_episode_test
 
         # ── Mode-specific return buffers (window=50) ─────────────
@@ -114,8 +101,8 @@ class PhysiCellModelWrapper(gym.Wrapper):
             ],
             elements=[str(p.parent), p.name],
         )
-        self.csv_path_init = path_cells_csv
-        self.cell_name_file = p.name
+        self.csv_path_init         = path_cells_csv
+        self.cell_name_file        = p.name
         self.cell_positions_folder = str(p.parent)
 
     # ── Initial condition helpers ────────────────────────────────
@@ -144,41 +131,39 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
             # Pop mode pools — stored separately, not passed to generator directly
             raw_train = self.generation_cfg.pop("mode_train")
-            raw_test = self.generation_cfg.pop("mode_test")
+            raw_test  = self.generation_cfg.pop("mode_test")
             self.mode_train = raw_train if isinstance(raw_train, list) else [raw_train]
-            self.mode_test = raw_test if isinstance(raw_test, list) else [raw_test]
+            self.mode_test  = raw_test  if isinstance(raw_test,  list) else [raw_test]
 
             self.generation_cfg.setdefault("seed", self.seed_val)
-            self.dataset_name = self.generation_cfg.get("dataset", "generated")
+            self.dataset_name  = self.generation_cfg.get("dataset", "generated")
             self._test_mode_idx = 0
 
         # ── Pick geometry for this episode ───────────────────────
         if self.mode == "train":
-            pool = self.mode_train
+            pool        = self.mode_train
             # Train rotates too — ensures all train geometries get coverage
             chosen_mode = pool[self._test_mode_idx % len(pool)]
             # only advance test index for test episodes
         else:
-            pool = self.mode_test
+            pool        = self.mode_test
             chosen_mode = pool[self._test_mode_idx % len(pool)]
-            self._test_mode_idx += 1  # advance only on test episodes
+            self._test_mode_idx += 1   # advance only on test episodes
 
         self.generation_cfg["mode"] = chosen_mode
 
         # ── Write CSV ────────────────────────────────────────────
         ic_dir = os.path.join(
-            self.base_output_dir,
-            self.mode,
-            "initial_conditions",
-            self.dataset_name,
+            self.base_output_dir, self.mode,
+            "initial_conditions", self.dataset_name,
         )
         os.makedirs(ic_dir, exist_ok=True)
 
-        episode = self.env.unwrapped.episode + 1  # next episode id
+        episode  = self.env.unwrapped.episode + 1   # next episode id
         csv_path = os.path.join(ic_dir, f"ic_{str(episode).zfill(6)}.csv")
 
-        gen_cfg = self.generation_cfg.copy()
-        gen_cfg["seed"] = self.generation_cfg["seed"] + episode  # unique per episode
+        gen_cfg             = self.generation_cfg.copy()
+        gen_cfg["seed"]     = self.generation_cfg["seed"] + episode   # unique per episode
         gen_cfg["csv_path"] = csv_path
 
         _, self.type_mode = generate_initial_condition(**gen_cfg)
@@ -191,7 +176,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
             no_generation_cfg = self.no_generation_cfg
         self.dataset_name = no_generation_cfg.get("dataset", "replay")
         if not hasattr(self, "list_csv"):
-            self.list_csv = no_generation_cfg["list_csv"]
+            self.list_csv        = no_generation_cfg["list_csv"]
             self.current_csv_idx = 0
         csv_path = self.list_csv[self.current_csv_idx % len(self.list_csv)]
         self.current_csv_idx += 1
@@ -200,14 +185,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
     # ── Core gym interface ───────────────────────────────────────
 
-    def reset(
-        self,
-        seed=None,
-        options=None,
-        generation_cfg=None,
-        no_generation_cfg=None,
-        **kwargs,
-    ):
+    def reset(self, seed=None, options=None, generation_cfg=None, no_generation_cfg=None, **kwargs):
         """
         Reset flow:
         1. Determine train/test mode for the NEXT episode
@@ -218,9 +196,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         """
         # 1. Mode for next episode
         next_episode = self.env.unwrapped.episode + 1
-        self.mode = (
-            "test" if (next_episode % self.frequence_episode_test == 0) else "train"
-        )
+        self.mode = "test" if (next_episode % self.frequence_episode_test == 0) else "train"
         self.generate_physicell_data = True if self.mode == "test" else False
 
         if seed is not None:
@@ -240,56 +216,47 @@ class PhysiCellModelWrapper(gym.Wrapper):
         obs, info = self.env.reset(seed=seed, options=options)
 
         # 5. Always inject — actor process guard never silently drops again
-        info["train_test"] = self.mode
-        info["type_mode"] = self.type_mode  # always a str, never None
+        info["train_test"]   = self.mode
+        info["type_mode"]    = self.type_mode   # always a str, never None
         info["step_episode"] = 0
 
         return obs, info
 
     def step(self, action: np.ndarray):
         # Build action dict
-        d_action = {
-            v: np.array([val]) for v, val in zip(self.list_variable_name, action)
-        }
+        d_action = {v: np.array([val]) for v, val in zip(self.list_variable_name, action)}
 
         max_radius = np.sqrt(
-            (self.env.unwrapped.width / 2) ** 2 + (self.env.unwrapped.height / 2) ** 2
+            (self.env.unwrapped.width  / 2) ** 2 +
+            (self.env.unwrapped.height / 2) ** 2
         )
 
         # Scale [0,1] actions → physical PhysiCell coordinates
-        d_action["drug_1_x"] = (
-            self.env.unwrapped.x_min + d_action["drug_1_x"] * self.env.unwrapped.width
-        )
-        d_action["drug_1_y"] = (
-            self.env.unwrapped.y_min + d_action["drug_1_y"] * self.env.unwrapped.height
-        )
+        d_action["drug_1_x"]      = self.env.unwrapped.x_min + d_action["drug_1_x"]      * self.env.unwrapped.width
+        d_action["drug_1_y"]      = self.env.unwrapped.y_min + d_action["drug_1_y"]      * self.env.unwrapped.height
         d_action["drug_1_radius"] = d_action["drug_1_radius"] * max_radius
 
         obs, r_cancer_cells, terminated, truncated, info = self.env.step(d_action)
         dose_spent = self.env.unwrapped.get_wrapper_attr("get_dose_spent")()
 
         # Always inject wrapper keys — same pattern as reset()
-        info.update(
-            {
-                "dose_spent": dose_spent,
-                "type_mode": self.type_mode,
-                "step_episode": self.env.unwrapped.step_episode,
-                "train_test": self.mode,
-            }
-        )
+        info.update({
+            "dose_spent":   dose_spent,
+            "type_mode":    self.type_mode,
+            "step_episode": self.env.unwrapped.step_episode,
+            "train_test":   self.mode,
+        })
 
         reward = self.w_cell * r_cancer_cells - dose_spent
 
-        self.list_data.append(
-            {
-                "step": self.env.unwrapped.step_episode,
-                "reward": reward,
-                "dose_spent": dose_spent,
-                "number_tumor": info.get("number_tumor", 0),
-                "train_test": self.mode,
-                "type_mode": self.type_mode,
-            }
-        )
+        self.list_data.append({
+            "step":         self.env.unwrapped.step_episode,
+            "reward":       reward,
+            "dose_spent":   dose_spent,
+            "number_tumor": info.get("number_tumor", 0),
+            "train_test":   self.mode,
+            "type_mode":    self.type_mode,
+        })
 
         return obs, reward, terminated, truncated, info
 
@@ -321,9 +288,9 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # ---------------------------------------------------------
         if self.generate_physicell_data:
             import matplotlib.pyplot as plt
-
+            
             fig, ax1 = plt.subplots(figsize=(8, 5))
-
+            
             # Example plot: Reward over time
             ax1.set_xlabel("Step")
             ax1.set_ylabel("Reward", color="tab:blue")
@@ -334,17 +301,12 @@ class PhysiCellModelWrapper(gym.Wrapper):
             if "cumulative_dose_spent" in df.columns:
                 ax2 = ax1.twinx()
                 ax2.set_ylabel("Cumulative Dose", color="tab:red")
-                ax2.plot(
-                    df["step"],
-                    df["cumulative_dose_spent"],
-                    color="tab:red",
-                    linestyle="--",
-                )
+                ax2.plot(df["step"], df["cumulative_dose_spent"], color="tab:red", linestyle="--")
                 ax2.tick_params(axis="y", labelcolor="tab:red")
 
             plt.title(f"Episode {run_idx} Telemetry ({self.type_mode})")
             fig.tight_layout()
-
+            
             # Save as PNG
             plt.savefig(os.path.join(out_dir, "episode_metrics.png"), dpi=150)
             plt.close(fig)
@@ -355,24 +317,22 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # Point PhysiCell output to the episode folder for the NEXT run
         # Toggle BOTH SVG and full_data flags to strictly silence training runs
         is_active = "true" if self.generate_physicell_data else "false"
-
+        
         self.change_xml(
             keys=[
-                "//save/folder",
-                "//save/SVG/enable",
-                "//save/full_data/enable",  # <-- Added to silence .mat files during training
+                "//save/folder", 
+                "//save/SVG/enable", 
+                "//save/full_data/enable"  # <-- Added to silence .mat files during training
             ],
             elements=[
-                out_dir,
-                is_active,
-                is_active,  # <-- Added
+                out_dir, 
+                is_active, 
+                is_active                  # <-- Added
             ],
         )
 
     def _episode_output_dir(self, run_idx: int) -> str:
         return os.path.join(
-            self.base_output_dir,
-            self.mode,
-            "episodes",
-            f"run_{str(run_idx).zfill(6)}",
+            self.base_output_dir, self.mode,
+            "episodes", f"run_{str(run_idx).zfill(6)}",
         )
