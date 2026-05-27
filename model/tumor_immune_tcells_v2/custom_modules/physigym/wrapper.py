@@ -5,7 +5,6 @@ import os
 import pandas as pd
 import shutil
 import subprocess
-import tempfile
 from init_conds_v3 import generate_initial_condition
 from pathlib import Path
 
@@ -34,14 +33,15 @@ def _render_frame(
     type_mode,
     reward_history,     # list of per-step rewards up to this step
     dose_history,       # list of per-step doses up to this step
+    x_min=0.0, x_max=1.0,   # env.unwrapped.x_min / x_max (physical units)
+    y_min=0.0, y_max=1.0,   # env.unwrapped.y_min / y_max (physical units)
 ):
     """
     Renders one video frame as a matplotlib figure and returns a numpy RGB array.
 
-    Layout (left → right):
-      col 0        : cell scatter (one heatmap per type, stacked vertically)
-      col 1..n_subs: substrate heatmaps (one per substrate, stacked vertically)
-      col -1       : telemetry panel (reward curve + dose bar)
+    Layout:
+      Top row   : [composite cells + drug circle (large, square)] | [reward curve / cum-dose panel]
+      Bottom row: substrate heatmaps side by side (one per substrate)
     """
     import matplotlib
     matplotlib.use("Agg")
@@ -50,161 +50,185 @@ def _render_frame(
     import matplotlib.gridspec as gridspec
     from matplotlib.colors import to_rgba
 
-    n_types = cells_img.shape[0]
     n_subs  = subs_img.shape[0]
     H, W    = cells_img.shape[1], cells_img.shape[2]
 
-    # ── figure layout ─────────────────────────────────────────────
-    # columns: [cells | subs... | telemetry]
-    n_cols   = 1 + n_subs + 1
-    fig_w    = 2.2 * n_cols
-    fig_h    = max(2.2 * max(n_types, n_subs), 4.0)
+    domain_width  = x_max - x_min
+    domain_height = y_max - y_min
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
-    fig.patch.set_facecolor("#1a1a2e")
-
-    # outer grid: [cells-col | subs-cols... | telemetry-col]
-    outer = gridspec.GridSpec(
-        1, n_cols,
-        figure=fig,
-        left=0.03, right=0.97,
-        top=0.88,  bottom=0.05,
-        wspace=0.12,
-    )
-
-    # ── header ────────────────────────────────────────────────────
-    fig.text(
-        0.5, 0.95,
-        f"Episode {episode:06d}  |  Step {step:03d}  |  {type_mode}",
-        ha="center", va="top", fontsize=9, color="white",
-        fontweight="bold",
-    )
-
-    # ── helpers ───────────────────────────────────────────────────
-    def _axis_off(ax, title, title_color="white"):
-        ax.set_xticks([]); ax.set_yticks([])
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#444466")
-        ax.set_title(title, fontsize=7, color=title_color, pad=2)
-
-    # ── col 0: cell heatmaps ──────────────────────────────────────
-    cell_inner = gridspec.GridSpecFromSubplotSpec(
-        n_types, 1, subplot_spec=outer[0], hspace=0.08
-    )
     dose_norm   = float(action[0]) if len(action) > 0 else 0.0
     x_norm      = float(action[1]) if len(action) > 1 else 0.5
     y_norm      = float(action[2]) if len(action) > 2 else 0.5
     radius_norm = float(action[3]) if len(action) > 3 else 0.0
 
-    # injection circle in pixel coords
-    cx_px = x_norm * W
-    cy_px = (1.0 - y_norm) * H   # flip y: image row 0 = top
-    r_px  = radius_norm * min(H, W)
+    # injection circle in physical coords
+    cx_phys = x_min + x_norm * domain_width
+    cy_phys = y_min + y_norm * domain_height
+    r_phys  = radius_norm * max(domain_width, domain_height)
 
+    # ── composite: blend all cell types onto white background ────────
+    _CELL_COLORS = {"tumor": "gray", "t_cell": "red", "macrophage": "yellow"}
+
+    bg_rgb = np.array([1.0, 1.0, 1.0])
+    composite = np.full((H, W, 3), bg_rgb)
     for i, name in enumerate(cell_type_names):
-        ax = fig.add_subplot(cell_inner[i])
-        channel = cells_img[i].astype(float)
-
-        # build a single-hue RGBA image tinted by cell_type_color
-        color = to_rgba(cell_type_colors.get(name, "gray"))
-        rgba  = np.zeros((H, W, 4), dtype=float)
-        alpha_channel = channel / 255.0
+        hex_color = _CELL_COLORS.get(name, cell_type_colors.get(name, "gray"))
+        color = np.array(to_rgba(hex_color)[:3])
+        alpha = cells_img[i].astype(float) / 255.0
         for c in range(3):
-            rgba[:, :, c] = color[c]
-        rgba[:, :, 3] = alpha_channel
-        # dark background
-        bg = np.full((H, W, 4), [0.08, 0.08, 0.15, 1.0])
-        # composite over dark bg
-        out = bg.copy()
-        a = rgba[:, :, 3:4]
-        out[:, :, :3] = rgba[:, :, :3] * a + bg[:, :, :3] * (1 - a)
-        out[:, :, 3]  = 1.0
+            composite[:, :, c] = composite[:, :, c] * (1 - alpha) + color[c] * alpha
+    composite = np.clip(composite, 0, 1)
 
-        ax.imshow(out, origin="upper", interpolation="nearest", aspect="equal")
+    # ── figure ────────────────────────────────────────────────────
+    aspect       = domain_height / max(domain_width, 1e-8)
+    cell_panel_w = 3.8
+    cell_panel_h = cell_panel_w * aspect
+    telem_w      = 2.6
+    sub_h        = 1.1
+    fig_w = cell_panel_w + telem_w + 0.4
+    fig_h = cell_panel_h + sub_h + 0.6
 
-        # draw injection circle on every cell panel
-        if dose_norm > 0.01 and r_px > 0:
-            circ = mpatches.Circle(
-                (cx_px, cy_px), r_px,
-                linewidth=1.2, edgecolor="white", facecolor="none",
-                linestyle="--", alpha=0.7,
-            )
-            ax.add_patch(circ)
-            ax.plot(cx_px, cy_px, "+", color="white", markersize=5, markeredgewidth=1.0)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=110)
+    fig.patch.set_facecolor("#1a1a2e")
 
-        _axis_off(ax, name, title_color=cell_type_colors.get(name, "white"))
-
-    # ── col 1..n_subs: substrate heatmaps ─────────────────────────
-    for j, sname in enumerate(substrate_names):
-        subs_inner = gridspec.GridSpecFromSubplotSpec(
-            n_subs, 1, subplot_spec=outer[1 + j], hspace=0.08
-        )
-        # only draw the matching substrate in this column
-        ax = fig.add_subplot(subs_inner[j])
-        label, cmap = _SUBSTRATE_STYLE.get(sname, (sname, "viridis"))
-        ax.imshow(
-            subs_img[j],
-            cmap=cmap, vmin=0, vmax=255,
-            origin="upper", interpolation="nearest", aspect="equal",
-        )
-        # injection marker on drug channel only
-        if sname == "drug_1" and dose_norm > 0.01 and r_px > 0:
-            circ = mpatches.Circle(
-                (cx_px, cy_px), r_px,
-                linewidth=1.5, edgecolor="yellow", facecolor="none",
-                linestyle="-", alpha=0.9,
-            )
-            ax.add_patch(circ)
-            ax.plot(cx_px, cy_px, "+", color="yellow", markersize=6, markeredgewidth=1.2)
-        _axis_off(ax, label)
-        # blank the other rows in this column
-        for k in range(n_subs):
-            if k != j:
-                ax_blank = fig.add_subplot(subs_inner[k])
-                ax_blank.set_visible(False)
-
-    # ── last col: telemetry ────────────────────────────────────────
-    tel_inner = gridspec.GridSpecFromSubplotSpec(
-        3, 1, subplot_spec=outer[n_cols - 1], hspace=0.4
+    # outer: 2 rows × 2 cols; bottom row spans both cols
+    outer = gridspec.GridSpec(
+        2, 2,
+        figure=fig,
+        left=0.03, right=0.97,
+        top=0.91,  bottom=0.04,
+        hspace=0.28, wspace=0.12,
+        height_ratios=[cell_panel_h, sub_h],
+        width_ratios=[cell_panel_w, telem_w],
     )
 
-    # reward curve
+    # ── header ────────────────────────────────────────────────────
+    fig.text(
+        0.5, 0.97,
+        f"Episode {episode:06d}  |  Step {step:03d}  |  {type_mode}",
+        ha="center", va="top", fontsize=9, color="white", fontweight="bold",
+    )
+
+    # ── helpers ───────────────────────────────────────────────────
+    def _style_ax(ax, title, title_color="white"):
+        ax.set_xticks([]); ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#444466")
+        ax.set_title(title, fontsize=7, color=title_color, pad=2)
+
+    def _style_plot_ax(ax, title):
+        ax.set_facecolor("#0d0d1a")
+        ax.set_title(title, fontsize=7, color="white", pad=2)
+        ax.tick_params(labelsize=5, colors="gray")
+        for sp in ax.spines.values():
+            sp.set_edgecolor("#444466")
+
+    # ── top-left: composite cell panel ────────────────────────────
+    cell_extent = [x_min, x_max, y_min, y_max]
+    ax_cells = fig.add_subplot(outer[0, 0])
+    ax_cells.imshow(
+        composite, origin="lower",
+        extent=cell_extent, interpolation="nearest", aspect="equal",
+    )
+    ax_cells.set_xlim(x_min, x_max)
+    ax_cells.set_ylim(y_min, y_max)
+
+    # draw per-type legend
+    legend_handles = []
+    for name in cell_type_names:
+        c = _CELL_COLORS.get(name, cell_type_colors.get(name, "gray"))
+        legend_handles.append(mpatches.Patch(color=c, label=name))
+    ax_cells.legend(
+        handles=legend_handles,
+        loc="lower left", fontsize=5,
+        framealpha=0.7, facecolor="white", edgecolor="#aaaaaa",
+        labelcolor="black",
+    )
+
+    # dose value top-right
+    ax_cells.text(
+        0.98, 0.98, f"dose {dose_norm:.3f}",
+        transform=ax_cells.transAxes,
+        ha="right", va="top", fontsize=6,
+        color="#0044cc", fontweight="bold",
+    )
+
+    # injection circle: filled with alpha ∝ dose, dashed outline always visible
+    if r_phys > 0:
+        fill = mpatches.Circle(
+            (cx_phys, cy_phys), r_phys,
+            linewidth=0, edgecolor="none", facecolor="#0044cc",
+            alpha=dose_norm * 0.5,
+        )
+        ax_cells.add_patch(fill)
+        if dose_norm > 0.01:
+            outline = mpatches.Circle(
+                (cx_phys, cy_phys), r_phys,
+                linewidth=1.8, edgecolor="#0044cc", facecolor="none",
+                linestyle="--", alpha=0.9,
+            )
+            ax_cells.add_patch(outline)
+            ax_cells.plot(cx_phys, cy_phys, "+", color="#0044cc", markersize=7, markeredgewidth=1.5)
+
+    _style_ax(ax_cells, "Cells (composite)", title_color="white")
+
+    # ── top-right: telemetry ──────────────────────────────────────
+    tel_inner = gridspec.GridSpecFromSubplotSpec(
+        3, 1, subplot_spec=outer[0, 1], hspace=0.55
+    )
+
     ax_r = fig.add_subplot(tel_inner[0])
-    ax_r.set_facecolor("#0d0d1a")
+    _style_plot_ax(ax_r, "Reward / step")
     if reward_history:
         ax_r.plot(reward_history, color="#00d4ff", linewidth=1.0)
     ax_r.axhline(0, color="#444466", linewidth=0.6, linestyle="--")
-    ax_r.set_title("Reward", fontsize=7, color="white", pad=2)
-    ax_r.tick_params(labelsize=5, colors="gray")
-    for sp in ax_r.spines.values():
-        sp.set_edgecolor("#444466")
 
-    # cumulative reward
     ax_cr = fig.add_subplot(tel_inner[1])
-    ax_cr.set_facecolor("#0d0d1a")
+    _style_plot_ax(ax_cr, "Cumulative reward")
     if reward_history:
         ax_cr.plot(np.cumsum(reward_history), color="#a8ff78", linewidth=1.0)
-    ax_cr.set_title("Cum. reward", fontsize=7, color="white", pad=2)
-    ax_cr.tick_params(labelsize=5, colors="gray")
-    for sp in ax_cr.spines.values():
-        sp.set_edgecolor("#444466")
+    ax_cr.axhline(0, color="#444466", linewidth=0.6, linestyle="--")
 
-    # dose bar (current step)
     ax_d = fig.add_subplot(tel_inner[2])
-    ax_d.set_facecolor("#0d0d1a")
-    ax_d.barh(0, dose_norm, color="#ff6b6b", height=0.6)
-    ax_d.set_xlim(0, 1)
-    ax_d.set_ylim(-0.5, 0.5)
-    ax_d.set_title(f"Dose  {dose_norm:.2f}", fontsize=7, color="white", pad=2)
-    ax_d.set_yticks([])
-    ax_d.tick_params(labelsize=5, colors="gray")
-    for sp in ax_d.spines.values():
-        sp.set_edgecolor("#444466")
+    _style_plot_ax(ax_d, f"Cumulative dose  {sum(dose_history):.2f}")
+    if dose_history:
+        ax_d.plot(np.cumsum(dose_history), color="#ff6b6b", linewidth=1.0)
+    ax_d.axhline(0, color="#444466", linewidth=0.6, linestyle="--")
+
+    # ── bottom row: substrate heatmaps (spans both columns) ───────
+    # merge bottom row into one wide subplot spec, then subdivide
+    bottom_spec = gridspec.GridSpecFromSubplotSpec(
+        1, n_subs,
+        subplot_spec=outer[1, :],   # span both columns
+        wspace=0.12,
+    )
+    sub_extent = [x_min, x_max, y_min, y_max]
+    for j, sname in enumerate(substrate_names):
+        ax_s = fig.add_subplot(bottom_spec[j])
+        label, cmap = _SUBSTRATE_STYLE.get(sname, (sname, "viridis"))
+        ax_s.imshow(
+            subs_img[j],
+            cmap=cmap, vmin=0, vmax=255,
+            origin="lower", extent=sub_extent,
+            interpolation="nearest", aspect="equal",
+        )
+        ax_s.set_xlim(x_min, x_max)
+        ax_s.set_ylim(y_min, y_max)
+        if sname == "drug_1" and dose_norm > 0.01 and r_phys > 0:
+            circ = mpatches.Circle(
+                (cx_phys, cy_phys), r_phys,
+                linewidth=1.5, edgecolor="yellow", facecolor="none",
+                linestyle="-", alpha=0.9,
+            )
+            ax_s.add_patch(circ)
+            ax_s.plot(cx_phys, cy_phys, "+", color="yellow", markersize=5, markeredgewidth=1.2)
+        _style_ax(ax_s, label)
 
     # ── rasterise to numpy RGB ─────────────────────────────────────
     fig.canvas.draw()
-    buf = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    w, h = fig.canvas.get_width_height()
+    buf = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8).reshape(h, w, 4)
+    buf = buf[:, :, :3].copy()
     plt.close(fig)
     return buf
 
@@ -267,6 +291,12 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.seed_val              = int(x_root.xpath("//random_seed")[0].text)
 
         os.makedirs(self.base_output_dir, exist_ok=True)
+
+        # Disable PhysiCell file output permanently — must be set before first reset()
+        self.change_xml(
+            keys=["//save/SVG/enable", "//save/full_data/enable"],
+            elements=["false", "false"],
+        )
 
         # ── Episode state ────────────────────────────────────────
         self.list_data            = []
@@ -515,44 +545,56 @@ class PhysiCellModelWrapper(gym.Wrapper):
         reward_so_far = []
         dose_so_far   = []
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for i, frame in enumerate(self._frame_buffer):
-                reward_so_far.append(frame["reward"])
-                dose_so_far.append(frame["dose"])
+        import cv2
+        frames_dir = os.path.join(out_dir, "frames")
+        os.makedirs(frames_dir, exist_ok=True)
 
-                rgb = _render_frame(
-                    cells_img       = frame["cells"],
-                    subs_img        = frame["subs"],
-                    cell_type_names = cell_type_names,
-                    cell_type_colors= cell_type_colors,
-                    substrate_names = substrate_names,
-                    action          = frame["action"],
-                    step            = i,
-                    episode         = episode,
-                    type_mode       = self.type_mode,
-                    reward_history  = list(reward_so_far),
-                    dose_history    = list(dose_so_far),
-                )
+        for i, frame in enumerate(self._frame_buffer):
+            reward_so_far.append(frame["reward"])
+            dose_so_far.append(frame["dose"])
 
-                # save as PNG with zero-padded index for ffmpeg glob
-                import cv2
-                png_path = os.path.join(tmp_dir, f"frame_{i:05d}.png")
-                cv2.imwrite(png_path, cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
-
-            video_path = os.path.join(out_dir, "video.mp4")
-            subprocess.run(
-                [
-                    "ffmpeg", "-y",
-                    "-framerate", "10",
-                    "-i", os.path.join(tmp_dir, "frame_%05d.png"),
-                    "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                    "-threads", "1",
-                    video_path,
-                ],
-                check=True,
-                capture_output=True,
+            rgb = _render_frame(
+                cells_img       = frame["cells"],
+                subs_img        = frame["subs"],
+                cell_type_names = cell_type_names,
+                cell_type_colors= cell_type_colors,
+                substrate_names = substrate_names,
+                action          = frame["action"],
+                step            = i,
+                episode         = episode,
+                type_mode       = self.type_mode,
+                reward_history  = list(reward_so_far),
+                dose_history    = list(dose_so_far),
+                x_min           = env_inner.x_min,
+                x_max           = env_inner.x_max,
+                y_min           = env_inner.y_min,
+                y_max           = env_inner.y_max,
             )
+
+            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(os.path.join(frames_dir, f"frame_{i:05d}.png"), bgr)
+
+        video_path = os.path.join(out_dir, "video.mp4")
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-framerate", "10",
+                "-i", os.path.join(frames_dir, "frame_%05d.png"),
+                "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-threads", "1",
+                video_path,
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        # cleanup: keep only video.mp4 and *.csv — remove everything else
+        _KEEP = {".mp4", ".csv"}
+        shutil.rmtree(frames_dir, ignore_errors=True)
+        for f in os.scandir(out_dir):
+            if f.is_file() and os.path.splitext(f.name)[1] not in _KEEP:
+                os.unlink(f.path)
 
     def _episode_output_dir(self, run_idx: int) -> str:
         return os.path.join(
