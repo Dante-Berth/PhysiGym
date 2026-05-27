@@ -26,9 +26,7 @@ from rb_tip import ReplayBuffer
 import queue
 from torch.multiprocessing import Event, Queue
 import itertools
-
-_log_counter = itertools.count(0)
-
+_log_counter = itertools.count(0) 
 
 # --------------------------------------------------------------
 # Helper: convert dict-of-arrays → PyG Batch (same as your original)
@@ -74,17 +72,17 @@ def actor_process(
     is_graph = "graph" in d_arg["model"]["observation_mode"]
 
     d_arg_env = {
-        "action_space_shape": envs.action_space.shape,
-        "observation_space_shape": envs.observation_space.shape,
-        "observation_mode": d_arg["model"]["observation_mode"],
-        "x_min": envs.get_attr("x_min")[0],
-        "x_max": envs.get_attr("x_max")[0],
-        "y_min": envs.get_attr("y_min")[0],
-        "y_max": envs.get_attr("y_max")[0],
-        "action_space_high": envs.action_space.high,
-        "action_space_low": envs.action_space.low,
-        "observation_space_dtype": envs.observation_space.dtype,
-        "is_graph": is_graph,
+        "action_space_shape":       envs.action_space.shape,
+        "observation_space_shape":  envs.observation_space.shape,
+        "observation_mode":         d_arg["model"]["observation_mode"],
+        "x_min":                    envs.get_attr("x_min")[0],
+        "x_max":                    envs.get_attr("x_max")[0],
+        "y_min":                    envs.get_attr("y_min")[0],
+        "y_max":                    envs.get_attr("y_max")[0],
+        "action_space_high":        envs.action_space.high,
+        "action_space_low":         envs.action_space.low,
+        "observation_space_dtype":  envs.observation_space.dtype,
+        "is_graph":                 is_graph,
     }
 
     env_info_queue.put(d_arg_env)
@@ -101,9 +99,9 @@ def actor_process(
 
     actor_local.eval()
 
-    num_envs = envs.num_envs
+    num_envs        = envs.num_envs
     episode_returns = np.zeros(num_envs, dtype=np.float64)
-    local_step = 0
+    local_step      = 0
 
     while not stop_event.is_set():
         # Try to fetch a new policy (non-blocking)
@@ -144,17 +142,17 @@ def actor_process(
             except Exception:
                 pass
             del envs
-            envs = vec_envs(d_arg)
-            obs = envs.reset()
-            num_envs = envs.num_envs
+            envs            = vec_envs(d_arg)
+            obs             = envs.reset()
+            num_envs        = envs.num_envs
             episode_returns = np.zeros(num_envs, dtype=np.float64)
-            restarted = True
+            restarted       = True
 
         if restarted:
             continue
 
         episode_returns += rewards.astype(np.float64)
-        local_step += num_envs - len(envs.dead_envs)
+        local_step      += num_envs - len(envs.dead_envs)
 
         batch_samples = []
         for i in range(num_envs):
@@ -164,31 +162,25 @@ def actor_process(
             done = dones[i]
 
             if is_graph:
-                o = {k: v[i] for k, v in obs.items()}
+                o  = {k: v[i] for k, v in obs.items()}
                 no = {k: v[i] for k, v in next_obs.items()}
             else:
-                o = obs[i].copy() if isinstance(obs[i], np.ndarray) else obs[i]
-                no = (
-                    next_obs[i].copy()
-                    if isinstance(next_obs[i], np.ndarray)
-                    else next_obs[i]
-                )
+                o  = obs[i].copy()      if isinstance(obs[i],      np.ndarray) else obs[i]
+                no = next_obs[i].copy() if isinstance(next_obs[i], np.ndarray) else next_obs[i]
 
             if done:
                 train_test = info.get("train_test", "train")
-                step_ep = info.get("step_episode", 0)
-                type_mode = info.get("type_mode", "unknown")
+                step_ep    = info.get("step_episode", 0)
+                type_mode  = info.get("type_mode", "unknown")
                 try:
-                    stats_queue.put_nowait(
-                        {
-                            "episode_return": float(episode_returns[i]),
-                            "episode_length": int(step_ep),
-                            "step": int(local_step),
-                            "timestamp": time.time() - begin_time,
-                            "train_test": train_test,
-                            "type_mode": type_mode,
-                        }
-                    )
+                    stats_queue.put_nowait({
+                        "episode_return": float(episode_returns[i]),
+                        "episode_length": int(step_ep),
+                        "step":           int(local_step),
+                        "timestamp":      time.time() - begin_time,
+                        "train_test":     train_test,
+                        "type_mode":      type_mode,
+                    })
                 except queue.Full:
                     pass
                 episode_returns[i] = 0.0
@@ -216,7 +208,7 @@ def run_async_sac(d_arg):
     # ── Sliding-window return trackers ──────────────────────────
     return_buffers = {
         "train": deque(maxlen=50),
-        "test": deque(maxlen=50),
+        "test":  deque(maxlen=50),
     }
 
     device = torch.device(
@@ -230,11 +222,11 @@ def run_async_sac(d_arg):
     random.seed(seed)
 
     # ── Queues — same as your original ─────────────────────────
-    actor_queue = mp.Queue(maxsize=5)
-    sample_queue = mp.Queue(maxsize=10_000)
-    stats_queue = mp.Queue(maxsize=100)
+    actor_queue    = mp.Queue(maxsize=5)
+    sample_queue   = mp.Queue(maxsize=10_000)
+    stats_queue    = mp.Queue(maxsize=100)
     env_info_queue = mp.Queue(maxsize=1)
-    stop_event = mp.Event()
+    stop_event     = mp.Event()
 
     actor_proc = mp.Process(
         target=actor_process,
@@ -249,7 +241,7 @@ def run_async_sac(d_arg):
         daemon=False,
     )
     actor_proc.start()
-    d_arg_env = env_info_queue.get()  # blocks until actor sends
+    d_arg_env    = env_info_queue.get()   # blocks until actor sends
     d_arg["env"] = d_arg_env
 
     rb = ReplayBuffer(
@@ -263,8 +255,8 @@ def run_async_sac(d_arg):
     )
 
     actor = Actor(d_arg_env, d_arg["neural_architecture_image"]).to(device)
-    qf1 = QNetwork(d_arg_env, d_arg["neural_architecture_image"]).to(device)
-    qf2 = QNetwork(d_arg_env, d_arg["neural_architecture_image"]).to(device)
+    qf1   = QNetwork(d_arg_env, d_arg["neural_architecture_image"]).to(device)
+    qf2   = QNetwork(d_arg_env, d_arg["neural_architecture_image"]).to(device)
 
     if d_arg_env["is_graph"]:
         dummy_graph = Data(
@@ -296,11 +288,41 @@ def run_async_sac(d_arg):
 
     if d_arg["rl"]["autotune"]:
         target_entropy = -float(np.prod(d_arg_env["action_space_shape"]))
-        log_alpha = torch.zeros(1, requires_grad=True, device=device)
-        alpha_optim = optim.Adam([log_alpha], lr=d_arg["rl"]["q_lr"])
-        alpha = log_alpha.exp().item()
+        log_alpha      = torch.zeros(1, requires_grad=True, device=device)
+        alpha_optim    = optim.Adam([log_alpha], lr=d_arg["rl"]["q_lr"])
+        alpha          = log_alpha.exp().item()
     else:
         alpha = float(d_arg["rl"]["alpha"])
+
+    # ── Optional: resume from checkpoint ───────────────────────
+    # All modules and optimizers are now materialized (dummy forward done,
+    # optimizers built), so loading state dicts will not collide with
+    # LazyLinear initialization.
+    resume_grad_steps = 0
+    resume_path = d_arg["rl"].get("resume_path", None)
+    if resume_path:
+        if not os.path.isfile(resume_path):
+            raise FileNotFoundError(f"--resume path does not exist: {resume_path}")
+        print(f"[checkpoint] resuming from {resume_path}")
+        state = torch.load(resume_path, map_location=device, weights_only=False)
+
+        actor.load_state_dict(state["actor"])
+        qf1.load_state_dict(state["qf1"])
+        qf2.load_state_dict(state["qf2"])
+        qf1_target.load_state_dict(state["qf1_target"])
+        qf2_target.load_state_dict(state["qf2_target"])
+        actor_optimizer.load_state_dict(state["actor_optimizer"])
+        q_optimizer.load_state_dict(state["q_optimizer"])
+
+        if d_arg["rl"]["autotune"] and "log_alpha" in state:
+            with torch.no_grad():
+                log_alpha.copy_(state["log_alpha"].to(device))
+            alpha_optim.load_state_dict(state["alpha_optim"])
+            alpha = log_alpha.exp().item()
+
+        resume_grad_steps = int(state.get("grad_steps", 0))
+        print(f"[checkpoint] resumed at grad_steps={resume_grad_steps}, "
+              f"drained={state.get('drained', 0)}")
 
     # send initial policy to actor
     try:
@@ -311,7 +333,32 @@ def run_async_sac(d_arg):
         actor_queue.put({k: v.detach().cpu() for k, v in actor.state_dict().items()})
 
     output_dir = d_arg["model"]["output_dir"]
-    writer = SummaryWriter(log_dir=output_dir)
+    writer     = SummaryWriter(log_dir=output_dir)
+
+    ckpt_dir = os.path.join(output_dir, "checkpoints")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    ckpt_frequency = d_arg["rl"].get("checkpoint_frequency", 10_000)
+
+    def save_checkpoint(tag: str, step: int):
+        path = os.path.join(ckpt_dir, f"sac_{tag}.pt")
+        state = {
+            "actor":           actor.state_dict(),
+            "qf1":             qf1.state_dict(),
+            "qf2":             qf2.state_dict(),
+            "qf1_target":      qf1_target.state_dict(),
+            "qf2_target":      qf2_target.state_dict(),
+            "actor_optimizer": actor_optimizer.state_dict(),
+            "q_optimizer":     q_optimizer.state_dict(),
+            "grad_steps":      step,
+            "drained":         drained,
+            "d_arg_env":       d_arg_env,
+            "config":          d_arg,
+        }
+        if d_arg["rl"]["autotune"]:
+            state["log_alpha"]   = log_alpha.detach().cpu()
+            state["alpha_optim"] = alpha_optim.state_dict()
+        torch.save(state, path)
+        return path
 
     if d_arg["simulation"]["wandb_track"]:
         run = wandb.init(
@@ -321,10 +368,10 @@ def run_async_sac(d_arg):
         )
         run.define_metric("charts/*", step_metric="samples_drained")
 
-    tau = d_arg["rl"]["tau"]
+    tau             = d_arg["rl"]["tau"]
     total_timesteps = d_arg["rl"]["total_timesteps"]
     learning_starts = d_arg["rl"]["learning_starts"]
-    batch_size = d_arg["rl"]["batch_size"]
+    batch_size      = d_arg["rl"]["batch_size"]
 
     # ------------------------------------------------------------------
     # FIX: drain thread
@@ -338,9 +385,9 @@ def run_async_sac(d_arg):
     # Only two lines touch the ReplayBuffer (add/sample) so a simple
     # threading.Lock() is sufficient — it is never held during GPU compute.
     # ------------------------------------------------------------------
-    drained = 0
-    drain_lock = threading.Lock()
-    drain_done = threading.Event()
+    drained      = 0
+    drain_lock   = threading.Lock()
+    drain_done   = threading.Event()
 
     def drain_worker():
         nonlocal drained
@@ -370,20 +417,17 @@ def run_async_sac(d_arg):
     # ── Training loop ───────────────────────────────────────────
     try:
         print("Starting training loop...")
-        pbar = tqdm(total=total_timesteps, dynamic_ncols=True)
-        grad_steps = 0
+        pbar       = tqdm(total=total_timesteps, dynamic_ncols=True)
+        grad_steps = resume_grad_steps
 
         while drained < total_timesteps:
             pbar.update(drained - pbar.n)
-            pbar.set_postfix(
-                {
-                    "rb": rb.size,
-                    "drained": drained,
-                    "stats_q": stats_queue.qsize(),
-                    "grads": grad_steps,
-                },
-                refresh=True,
-            )
+            pbar.set_postfix({
+                "rb":      rb.size,
+                "drained": drained,
+                "stats_q": stats_queue.qsize(),
+                "grads":   grad_steps,
+            }, refresh=True)
 
             # ── Log episode stats ────────────────────────────────
             while not stats_queue.empty():
@@ -392,22 +436,22 @@ def run_async_sac(d_arg):
                 except queue.Empty:
                     break
 
-                split = stat["train_test"]
-                typemode = stat.get("type_mode", "unknown")
+                split     = stat["train_test"]
+                typemode  = stat.get("type_mode", "unknown")
                 ep_return = stat["episode_return"]
 
                 return_buffers[split].append(ep_return)
 
                 log_dict = {
-                    f"charts/{split}_return_raw": ep_return,
+                    f"charts/{split}_return_raw":            ep_return,
                     f"charts/{split}_{typemode}_return_raw": ep_return,
-                    "charts/grad_steps": grad_steps,
+                    "charts/grad_steps":                     grad_steps,
                 }
 
                 buf = return_buffers[split]
                 if len(buf) >= 2:
                     log_dict[f"charts/{split}_return_mean50"] = np.mean(buf)
-                    log_dict[f"charts/{split}_return_std"] = np.std(buf)
+                    log_dict[f"charts/{split}_return_std"]    = np.std(buf)
 
                 if d_arg["simulation"]["wandb_track"]:
                     run.log(log_dict, step=drained)
@@ -428,17 +472,17 @@ def run_async_sac(d_arg):
                     batch = rb.sample()
 
                 next_state = batch["next_state"]
-                state = batch["state"]
-                action = batch["action"]
-                done = batch["done"]
-                reward = batch["reward"]
+                state      = batch["state"]
+                action     = batch["action"]
+                done       = batch["done"]
+                reward     = batch["reward"]
 
                 with torch.no_grad():
                     next_actions, next_log_pi, _ = actor.get_action(next_state)
-                    q1_next = qf1_target(next_state, next_actions)
-                    q2_next = qf2_target(next_state, next_actions)
+                    q1_next    = qf1_target(next_state, next_actions)
+                    q2_next    = qf2_target(next_state, next_actions)
                     min_q_next = torch.min(q1_next, q2_next) - alpha * next_log_pi
-                    next_q = (
+                    next_q     = (
                         reward.flatten()
                         + (1 - done.flatten())
                         * d_arg["rl"]["gamma"]
@@ -449,7 +493,7 @@ def run_async_sac(d_arg):
                 q2 = qf2(state, action).view(-1)
                 qf1_loss = F.mse_loss(q1, next_q)
                 qf2_loss = F.mse_loss(q2, next_q)
-                qf_loss = qf1_loss + qf2_loss
+                qf_loss  = qf1_loss + qf2_loss
 
                 q_optimizer.zero_grad()
                 qf_loss.backward()
@@ -459,8 +503,8 @@ def run_async_sac(d_arg):
                 if grad_steps % d_arg["rl"]["policy_frequency"] == 0:
                     for _ in range(d_arg["rl"]["policy_frequency"]):
                         actions_pi, log_pi, _ = actor.get_action(state)
-                        q1_pi = qf1(state, actions_pi)
-                        q2_pi = qf2(state, actions_pi)
+                        q1_pi      = qf1(state, actions_pi)
+                        q2_pi      = qf2(state, actions_pi)
                         actor_loss = (alpha * log_pi - torch.min(q1_pi, q2_pi)).mean()
 
                         actor_optimizer.zero_grad()
@@ -477,28 +521,21 @@ def run_async_sac(d_arg):
                             alpha = log_alpha.exp().item()
 
                 if grad_steps % d_arg["rl"]["target_network_frequency"] == 0:
-                    for param, target_param in zip(
-                        qf1.parameters(), qf1_target.parameters()
-                    ):
-                        target_param.data.copy_(
-                            tau * param.data + (1.0 - tau) * target_param.data
-                        )
-                    for param, target_param in zip(
-                        qf2.parameters(), qf2_target.parameters()
-                    ):
-                        target_param.data.copy_(
-                            tau * param.data + (1.0 - tau) * target_param.data
-                        )
+                    for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
+                        target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
+                    for param, target_param in zip(qf2.parameters(), qf2_target.parameters()):
+                        target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
 
                 if grad_steps % 500 == 0 and d_arg["simulation"]["wandb_track"]:
-                    run.log(
-                        {
-                            "charts/qf1_loss": qf1_loss.item(),
-                            "charts/qf2_loss": qf2_loss.item(),
-                            "charts/alpha": alpha,
-                        },
-                        step=drained,
-                    )
+                    run.log({
+                        "charts/qf1_loss":   qf1_loss.item(),
+                        "charts/qf2_loss":   qf2_loss.item(),
+                        "charts/alpha":      alpha,
+                    }, step=drained)
+
+                if grad_steps > 0 and grad_steps % ckpt_frequency == 0:
+                    path = save_checkpoint(f"step{grad_steps:08d}", grad_steps)
+                    print(f"[checkpoint] saved {path}")
 
             # ── Push policy to actor ─────────────────────────────
             # adaptive frequency: more often early in training
@@ -515,6 +552,12 @@ def run_async_sac(d_arg):
         print("Interrupted by user — shutting down.")
 
     finally:
+        try:
+            path = save_checkpoint("final", grad_steps)
+            print(f"[checkpoint] final weights saved to {path}")
+        except Exception as e:
+            print(f"[checkpoint] failed to save final weights: {e}")
+
         drain_done.set()
         drain_thread.join(timeout=3.0)
         stop_event.set()
@@ -539,135 +582,128 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument("--settingxml", default="config/PhysiCell_settings.xml")
+    parser.add_argument("--settingxml",   default="config/PhysiCell_settings.xml")
     parser.add_argument("--settingcells", default="config/cells.csv")
-    parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--gpu", type=str, default="true")
-    parser.add_argument("--observation_mode", default="transformer_nodes")
+    parser.add_argument("--seed",         type=int,   default=1)
+    parser.add_argument("--gpu",          type=str,   default="true")
+    parser.add_argument("--observation_mode",          default="transformer_nodes")
     parser.add_argument("--neural_architecture_image", default="impala")
-    parser.add_argument("--max_time_episode", type=float, default=7200.0)
-    parser.add_argument("--learning_starts", type=int, default=5_000)
-    parser.add_argument("--total_timesteps", type=int, default=int(5e5))
-    parser.add_argument("--rl_threads", type=int, default=3)
-    parser.add_argument("--num_envs", type=int, default=9)
-    parser.add_argument("--buffer_size", type=int, default=int(3e5))
+    parser.add_argument("--max_time_episode",  type=float, default=7200.0)
+    parser.add_argument("--learning_starts",   type=int,   default=5_000)
+    parser.add_argument("--total_timesteps",   type=int,   default=int(5e5))
+    parser.add_argument("--rl_threads",        type=int,   default=3)
+    parser.add_argument("--num_envs",          type=int,   default=9)
+    parser.add_argument("--buffer_size",       type=int,   default=int(3e5))
     parser.add_argument("--batch_size_multiplier", type=int, default=64)
-    parser.add_argument("--num_loops", type=int, default=3)
-    parser.add_argument("--policy_frequency", type=int, default=2)
+    parser.add_argument("--num_loops",         type=int,   default=3)
+    parser.add_argument("--policy_frequency",  type=int,   default=2)
     parser.add_argument("--target_network_frequency", type=int, default=1)
-    parser.add_argument("--name", default="TME_V2")
-    parser.add_argument("--wandb", default="true")
-    parser.add_argument("--entity", default="corporate-manu-sureli")
-    parser.add_argument("--tumor", type=int, default=128)
-    parser.add_argument("--Macrophage", type=int, default=32)
-    parser.add_argument("--T_cells", type=int, default=32)
-    parser.add_argument("--frequence_episode_test", type=int, default=4)
-    parser.add_argument("--img_mc_grid_size", type=int, default=64)
-    parser.add_argument("--w_cell", type=float, default=0.3)
+    parser.add_argument("--checkpoint_frequency",     type=int, default=10_000)
+    parser.add_argument("--resume",                   type=str, default=None,
+                        help="Path to a .pt checkpoint produced by save_checkpoint() to resume from.")
+    parser.add_argument("--name",    default="TME_V2")
+    parser.add_argument("--wandb",   default="true")
+    parser.add_argument("--entity",  default="corporate-manu-sureli")
+    parser.add_argument("--tumor",       type=int,   default=128)
+    parser.add_argument("--Macrophage",  type=int,   default=32)
+    parser.add_argument("--T_cells",     type=int,   default=32)
+    parser.add_argument("--frequence_episode_test", type=int,   default=4)
+    parser.add_argument("--img_mc_grid_size",       type=int,   default=64)
+    parser.add_argument("--w_cell",      type=float, default=0.3)
 
     args = parser.parse_args()
 
-    i_seed = None if str(args.seed).lower() == "none" else int(args.seed)
-    b_gpu = args.gpu.lower().startswith("t")
+    i_seed  = None if str(args.seed).lower() == "none" else int(args.seed)
+    b_gpu   = args.gpu.lower().startswith("t")
     b_wandb = args.wandb.lower().startswith("t")
 
     d_arg_simulation = {
-        "name": args.name,
-        "cuda": b_gpu,
+        "name":        args.name,
+        "cuda":        b_gpu,
         "wandb_track": b_wandb,
-        "seed": i_seed,
-        "max_time": args.max_time_episode,
+        "seed":        i_seed,
+        "max_time":    args.max_time_episode,
     }
 
     d_arg_wandb = {
-        "entity": args.entity,
-        "project": "SAC_ASYNC_TME_Tcells",
+        "entity":           args.entity,
+        "project":          "SAC_ASYNC_TME_Tcells",
         "sync_tensorboard": True,
-        "monitor_gym": True,
-        "save_code": True,
+        "monitor_gym":      True,
+        "save_code":        True,
     }
 
     d_arg_physigym_model = {
-        "id": "physigym/ModelPhysiCellEnv-v0",
-        "settingxml": args.settingxml,
+        "id":           "physigym/ModelPhysiCellEnv-v0",
+        "settingxml":   args.settingxml,
         "settingcells": args.settingcells,
         "cell_type_cmap": {
-            "tumor": "red",
-            "t_cell": "blue",
+            "tumor":      "red",
+            "t_cell":     "blue",
             "macrophage": "green",
         },
-        "figsize": (6, 6),
-        "observation_mode": args.observation_mode,
-        "render_mode": None,
-        "verbose": False,
+        "figsize":             (6, 6),
+        "observation_mode":    args.observation_mode,
+        "render_mode":         None,
+        "verbose":             False,
         "img_rgb_grid_size_x": args.img_mc_grid_size,
         "img_rgb_grid_size_y": args.img_mc_grid_size,
-        "img_mc_grid_size_x": args.img_mc_grid_size,
-        "img_mc_grid_size_y": args.img_mc_grid_size,
+        "img_mc_grid_size_x":  args.img_mc_grid_size,
+        "img_mc_grid_size_y":  args.img_mc_grid_size,
         "normalization_factor": args.tumor,
     }
 
     d_arg_physigym_wrapper = {
-        "list_variable_name": ["drug_1_dose", "drug_1_x", "drug_1_y", "drug_1_radius"],
-        "w_cell": args.w_cell,
+        "list_variable_name":     ["drug_1_dose", "drug_1_x", "drug_1_y", "drug_1_radius"],
+        "w_cell":                 args.w_cell,
         "frequence_episode_test": args.frequence_episode_test,
     }
 
     d_arg_rl = {
-        "total_timesteps": args.total_timesteps,
-        "buffer_size": args.buffer_size,
-        "batch_size": args.batch_size_multiplier * args.num_envs,
-        "learning_starts": args.learning_starts,
-        "num_loops": args.num_loops,
-        "policy_frequency": args.policy_frequency,
+        "total_timesteps":          args.total_timesteps,
+        "buffer_size":              args.buffer_size,
+        "batch_size":               args.batch_size_multiplier * args.num_envs,
+        "learning_starts":          args.learning_starts,
+        "num_loops":                args.num_loops,
+        "policy_frequency":         args.policy_frequency,
         "target_network_frequency": args.target_network_frequency,
-        "autotune": True,
-        "alpha": 0.05,
-        "tau": 0.005,
-        "q_lr": 3e-4,
-        "policy_lr": 3e-4,
-        "gamma": 0.99,
+        "checkpoint_frequency":     args.checkpoint_frequency,
+        "resume_path":              args.resume,
+        "autotune":                 True,
+        "alpha":                    0.05,
+        "tau":                      0.005,
+        "q_lr":                     3e-4,
+        "policy_lr":                3e-4,
+        "gamma":                    0.99,
     }
 
     d_arg_vect = {
-        "num_envs": args.num_envs,
+        "num_envs":   args.num_envs,
         "rl_threads": args.rl_threads,
     }
 
     params = {
-        "tumor": {
-            "correlation_length": 45,
-            "threshold": 0.55,
-            "number_cells": args.tumor,
-        },
-        "macrophage": {
-            "correlation_length": 45,
-            "threshold": 0.55,
-            "number_cells": args.Macrophage,
-        },
-        "t_cell": {
-            "correlation_length": 45,
-            "threshold": 0.55,
-            "number_cells": args.T_cells,
-        },
+        "tumor":      {"correlation_length": 45, "threshold": 0.55, "number_cells": args.tumor},
+        "macrophage": {"correlation_length": 45, "threshold": 0.55, "number_cells": args.Macrophage},
+        "t_cell":     {"correlation_length": 45, "threshold": 0.55, "number_cells": args.T_cells},
     }
 
     d_arg_generation = {
-        "params": params,
-        "seed": i_seed,
+        "params":     params,
+        "seed":       i_seed,
         "mode_train": ["network_field"],
-        "mode_test": ["circular", "rectangle"],
+        "mode_test":  ["circular", "rectangle"],
     }
 
     d_arg = {
-        "simulation": d_arg_simulation,
-        "vectorization": d_arg_vect,
-        "wandb": d_arg_wandb,
-        "rl": d_arg_rl,
-        "wrapper": d_arg_physigym_wrapper,
-        "model": d_arg_physigym_model,
+        "simulation":                d_arg_simulation,
+        "vectorization":             d_arg_vect,
+        "wandb":                     d_arg_wandb,
+        "rl":                        d_arg_rl,
+        "wrapper":                   d_arg_physigym_wrapper,
+        "model":                     d_arg_physigym_model,
         "neural_architecture_image": args.neural_architecture_image,
-        "generation": d_arg_generation,
+        "generation":                d_arg_generation,
     }
 
     d_arg["model"]["output_dir"] = (

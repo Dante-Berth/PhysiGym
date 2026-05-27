@@ -67,26 +67,28 @@ def _render_frame(
     r_phys  = radius_norm * max(domain_width, domain_height)
 
     # ── composite: blend all cell types onto white background ────────
+    # Fixed colors regardless of what the env colormap assigned:
     _CELL_COLORS = {"tumor": "gray", "t_cell": "red", "macrophage": "yellow"}
 
-    bg_rgb = np.array([1.0, 1.0, 1.0])
+    bg_rgb = np.array([1.0, 1.0, 1.0])   # white
     composite = np.full((H, W, 3), bg_rgb)
     for i, name in enumerate(cell_type_names):
         hex_color = _CELL_COLORS.get(name, cell_type_colors.get(name, "gray"))
         color = np.array(to_rgba(hex_color)[:3])
-        alpha = cells_img[i].astype(float) / 255.0
+        alpha = cells_img[i].astype(float) / 255.0          # (H, W)
         for c in range(3):
             composite[:, :, c] = composite[:, :, c] * (1 - alpha) + color[c] * alpha
     composite = np.clip(composite, 0, 1)
 
     # ── figure ────────────────────────────────────────────────────
-    aspect       = domain_height / max(domain_width, 1e-8)
+    # cell panel sized to match physical domain aspect ratio
+    aspect       = domain_height / max(domain_width, 1e-8)   # h/w ratio
     cell_panel_w = 3.8
     cell_panel_h = cell_panel_w * aspect
     telem_w      = 2.6
-    sub_h        = 1.1
+    sub_h        = 1.1          # fixed height for substrate row
     fig_w = cell_panel_w + telem_w + 0.4
-    fig_h = cell_panel_h + sub_h + 0.6
+    fig_h = cell_panel_h + sub_h + 0.6   # top + bottom + header
 
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=110)
     fig.patch.set_facecolor("#1a1a2e")
@@ -124,6 +126,7 @@ def _render_frame(
             sp.set_edgecolor("#444466")
 
     # ── top-left: composite cell panel ────────────────────────────
+    # extent = [left, right, bottom, top] in physical units
     cell_extent = [x_min, x_max, y_min, y_max]
     ax_cells = fig.add_subplot(outer[0, 0])
     ax_cells.imshow(
@@ -155,12 +158,14 @@ def _render_frame(
 
     # injection circle: filled with alpha ∝ dose, dashed outline always visible
     if r_phys > 0:
+        # filled area encodes dose intensity
         fill = mpatches.Circle(
             (cx_phys, cy_phys), r_phys,
             linewidth=0, edgecolor="none", facecolor="#0044cc",
             alpha=dose_norm * 0.5,
         )
         ax_cells.add_patch(fill)
+        # dashed outline + crosshair only when dose > threshold
         if dose_norm > 0.01:
             outline = mpatches.Circle(
                 (cx_phys, cy_phys), r_phys,
