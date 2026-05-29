@@ -306,6 +306,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # ── Episode state ────────────────────────────────────────
         self.list_data            = []
         self._frame_buffer        = []   # list of dicts: {cells, subs, action, reward, dose, n_tumor}
+        self._action_history      = []   # list of np.ndarray, one per env step in current episode
         self.generation_cfg       = None
         self.no_generation_cfg    = None
         self.generate_physicell_data = False
@@ -450,6 +451,9 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
         obs, info = self.env.reset(seed=seed, options=options)
 
+        # fresh action history for the new episode
+        self._action_history = []
+
         info["train_test"]   = self.mode
         info["type_mode"]    = self.type_mode
         info["step_episode"] = 0
@@ -480,15 +484,34 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
         reward = self.w_cell * r_cancer_cells - dose_spent
 
+        # raw action components in [0, 1] — same values the video annotates
+        action_dose   = float(action[0]) if len(action) > 0 else 0.0
+        action_x      = float(action[1]) if len(action) > 1 else 0.0
+        action_y      = float(action[2]) if len(action) > 2 else 0.0
+        action_radius = float(action[3]) if len(action) > 3 else 0.0
+
+        # track raw action vector for episode-end smoothness metrics
+        self._action_history.append(np.asarray(action, dtype=np.float32).copy())
+
         row = {
-            "step":         self.env.unwrapped.step_episode,
-            "reward":       reward,
-            "dose_spent":   dose_spent,
-            "number_tumor": info.get("number_tumor", 0),
-            "train_test":   self.mode,
-            "type_mode":    self.type_mode,
+            "step":          self.env.unwrapped.step_episode,
+            "reward":        reward,
+            "dose_spent":    dose_spent,
+            "number_tumor":  info.get("number_tumor", 0),
+            "train_test":    self.mode,
+            "type_mode":     self.type_mode,
+            "action_dose":   action_dose,
+            "action_x":      action_x,
+            "action_y":      action_y,
+            "action_radius": action_radius,
         }
         self.list_data.append(row)
+
+        # on episode end, attach smoothness metrics to info so the trainer
+        # can stream them through the same stats pipeline as episode_return
+        if terminated or truncated:
+            stats = self._compute_action_smoothness(self._action_history)
+            info.update(stats)
 
         # capture spatial frame for test episodes only
         if self.generate_physicell_data:
@@ -503,6 +526,48 @@ class PhysiCellModelWrapper(gym.Wrapper):
             })
 
         return obs, reward, terminated, truncated, info
+
+    # ── Action smoothness ────────────────────────────────────────
+
+    @staticmethod
+    def _compute_action_smoothness(action_history):
+        """
+        Per-episode summary of how 'twitchy' the policy was.
+
+        Returns a dict with:
+          action_step_delta_mean : mean ||a_t - a_{t-1}||_2 across the episode
+          action_step_delta_std  : std of the same series
+          action_autocorr_lag1   : mean Pearson correlation between a_t and a_{t-1},
+                                   averaged across the 4 action dimensions
+                                   (1 = perfectly smooth, 0 = noise, <0 = oscillating)
+        Returns NaNs (as 0.0) on episodes too short to compute.
+        """
+        if len(action_history) < 2:
+            return {
+                "action_step_delta_mean": 0.0,
+                "action_step_delta_std":  0.0,
+                "action_autocorr_lag1":   0.0,
+            }
+
+        A = np.stack(action_history, axis=0).astype(np.float32)   # (T, D)
+        deltas = np.linalg.norm(np.diff(A, axis=0), axis=1)        # (T-1,)
+
+        # per-dimension lag-1 autocorrelation, then average
+        ac = []
+        for d in range(A.shape[1]):
+            x = A[:, d]
+            if x.std() < 1e-8:
+                continue           # constant series → undefined, skip
+            num = np.mean((x[:-1] - x[:-1].mean()) * (x[1:] - x[1:].mean()))
+            den = x[:-1].std() * x[1:].std()
+            if den > 1e-8:
+                ac.append(num / den)
+
+        return {
+            "action_step_delta_mean": float(deltas.mean()),
+            "action_step_delta_std":  float(deltas.std()),
+            "action_autocorr_lag1":   float(np.mean(ac)) if ac else 0.0,
+        }
 
     # ── Telemetry & video ────────────────────────────────────────
 
