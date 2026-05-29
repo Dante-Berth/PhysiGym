@@ -329,37 +329,22 @@ where $c_t$ is the alive tumor-cell count at step $t$,
 $\lambda$ is the intrinsic growth rate (from \texttt{PhysiCell\_settings.xml}),
 $w_{\text{cell}}=0.3$, and $d_t$ is the normalised dose spent.
 A reward of $+1$ means the agent suppressed exactly the natural growth.
-This reward does not include an explicit dosage-escalation penalty
-(unlike earlier \physigym{} work), keeping the learning signal clean: the
-$d_t$ term already penalises drug use without conflating temporal dosing
+The $d_t$ term penalises drug use without conflating temporal dosing
 strategy with total exposure.
 
-\subsubsection*{Training and test distributions}
+\paragraph{Distributions.}
 \label{sec:distributions}
-
-\paragraph{Training distribution.}
-Initial cell positions are sampled from a \emph{network-field} generative
-process: white Gaussian noise $\eta\!\sim\!\mathcal{N}(0,1)$ is convolved
-with a Gaussian kernel of width $\sigma=\ell_c/\sqrt{2}$ (correlation length
-$\ell_c=45$\,µm) to produce a spatially correlated field $F$.
-Cells are placed at positions where $F > \theta$ ($\theta=0.55$), with
-probability proportional to $F$, yielding irregular, biologically plausible
-clustered layouts (Appendix~\ref{app:ic}).
-Initial counts: $\approx128$ tumor cells, 32 T-cells, 16 macrophages.
-
-\paragraph{Test distributions.}
-Two held-out layouts test out-of-distribution (OOD) generalisation:
-\begin{itemize}
-  \item \textbf{Circular}: tumor placed in an ellipse centred on the domain;
-    T-cells and macrophages placed in two flanking ellipses at $x=0.2$ and
-    $x=0.8$ of the domain width (shuffled randomly).
-  \item \textbf{Rectangle}: each cell type placed uniformly in a narrow
-    vertical strip (width $10\%$ of domain); strip positions are sampled
-    from non-overlapping intervals across the $x$-axis.
-\end{itemize}
-Neither layout is ever seen during training.
-Figure~\ref{fig:ic_distributions} shows representative examples of all three
-spatial distributions.
+Training initial conditions are sampled from a spatially correlated
+\emph{network-field} process (see Appendix~\ref{app:ic} for details),
+yielding irregular clustered layouts with $\approx128$ tumor cells,
+32 T-cells, and 16 macrophages.
+Two held-out layouts serve as test distributions to measure
+out-of-distribution generalisation: a \textbf{circular} layout, where
+each cell type is placed in a compact elliptic cluster, and a
+\textbf{rectangle} layout, where each type occupies a narrow vertical
+strip of the domain.
+Neither layout is seen during training.
+Figure~\ref{fig:ic_distributions} shows one representative example of each.
 
 \begin{figure}[h]
   \centering
@@ -371,7 +356,7 @@ spatial distributions.
     cells in flanking clusters.
     \emph{Right}: rectangle layout (test) — each cell type confined to a
     narrow vertical strip.
-    Tumor: grey $\bullet$; T-cell: red $\bullet$; macrophage: blue $\bullet$.}
+    Tumor cells are shown in grey, T-cells in red, and macrophages in blue.}
   \label{fig:ic_distributions}
 \end{figure}
 
@@ -379,49 +364,48 @@ spatial distributions.
 \label{sec:obs}
 
 In a tumor microenvironment there are different cell types and different
-molecules/chemical compounds (substrates). The simulator can expose several
-kinds of data: some carry explicit spatial information, others are spaceless
-summaries (e.g.\ a small vector of global statistics). Because \physigym{}
-can build all of these from the same underlying simulation, we use the toy model
-to study how the choice of observation space affects the dynamic treatment regime
-that RL learns, comparing six modes on cumulative return and on generalization to
-unseen spatial configurations.
-
-We compare six observation modes spanning a spectrum from global scalars to
-full spatial images.
+chemical compounds (substrates). \physigym{} can expose all of them as
+observations, from spaceless global statistics to full spatial images and
+cell-interaction graphs.
+In this work we compare six representative modes spanning scalars to images;
+graph-based representations (Delaunay triangulation, $k$-NN graphs) and
+more expressive structured scalar modes (K-means cluster descriptors,
+relational nearest-neighbour features) are supported by the framework but
+left for future work.
 Let $N_c=3$ (tumor, T-cell, macrophage) and $N_s=5$ substrates.
 
 \subsubsection*{Scalar observation spaces}
 
-\paragraph{S1 — \Sone{} ($N_c$-dim).}
+\paragraph{S1 (\Sone{}, $N_c$-dim).}
 Normalised alive count per cell type:
 $s_i = c_i(t)/c_{\text{init}} - 1$, $c_{\text{init}}=512$.
 
-\paragraph{S2 — \Stwo{} ($(N_c\!+\!N_s)$-dim).}
+\paragraph{S2 (\Stwo{}, $(N_c\!+\!N_s)$-dim).}
 S1 plus the domain-maximum concentration per substrate:
 $s_j = \max_\mathbf{x}\,\mathrm{conc}_j(\mathbf{x},t)$.
 
-\paragraph{S3 — \Sthree{} ($N_c + 6N_c$-dim $=21$).}
+\paragraph{S3 (\Sthree{}, $N_c + 6N_c = 21$ dims).}
 S1 plus per-type spatial statistics (6 values each):
-\emph{presence flag}, centroid $(x_\mu, y_\mu)$, spread $(x_\sigma, y_\sigma)$,
+presence flag, centroid $(x_\mu, y_\mu)$, spread $(x_\sigma, y_\sigma)$,
 and distance to domain centre — all normalised to $[0,1]$.
 
-\paragraph{S5 — \Sfive{} ($N_c + 6N_c + 6N_s$-dim $=39$).}
+\paragraph{S5 (\Sfive{}, $N_c + 6N_c + 6N_s = 39$ dims).}
 S3 extended with per-substrate spatial statistics:
-global mean, std, min, max, and concentration-weighted centroid $(x_c, y_c)$.
+global mean, standard deviation, min, max, and concentration-weighted
+centroid $(x_c, y_c)$.
 
 \subsubsection*{Image-based observation spaces}
 
 The simulation domain is discretised onto a $64\!\times\!64$ pixel grid.
 Cell channels: pixel $(i,j)$ receives $1/(g_xg_y)$ per cell whose position
-maps to bin $(i,j)$, scaled to $[0,255]$.
+maps to that bin.
 Substrate channels: each bin receives the maximum concentration observed
-there, then per-channel min–max normalised to $[0,255]$.
+there, then per-channel min–max normalised.
 
-\paragraph{I1 — \Ione{} ($N_c\!\times\!64\!\times\!64$, uint8).}
+\paragraph{I1 (\Ione{}, $N_c\!\times\!64\!\times\!64$).}
 One channel per cell type.
 
-\paragraph{I2 — \Itwo{} ($(N_c\!+\!N_s)\!\times\!64\!\times\!64$, uint8).}
+\paragraph{I2 (\Itwo{}, $(N_c\!+\!N_s)\!\times\!64\!\times\!64$).}
 I1 concatenated with all five substrate concentration maps.
 This is the richest observation and provides direct spatial feedback on
 macrophage polarisation state via the \texttt{pro\_tumoral},
@@ -681,26 +665,92 @@ No competing interests are declared.
 % ─────────────────────────────────────────────────────────────────────────────
 \appendix
 
-\section{Generation of Initial Conditions}
+\section{Generation of Spatially Correlated Initial Conditions}
 \label{app:ic}
 
-White Gaussian noise $\eta(\mathbf{x})\sim\mathcal{N}(0,1)$ is convolved
-with a Gaussian kernel $G_\sigma$ ($\sigma=\ell_c/\sqrt{2}$,
-$\ell_c=45$\,µm) to produce a correlated field $F$.
-An additional local noise component $\tilde\xi$ filtered at width
-$\ell_c/3$ is added with small weight $\alpha$ to introduce local
-heterogeneity.
-The field is normalised to $[0,1]$ and cells are sampled from positions
-with $\hat{F}>0.55$, with probability proportional to $\hat{F}$.
+This appendix describes the procedure used to generate spatially structured
+initial conditions for synthetic cellular networks. The method constructs
+spatially correlated random fields that bias the placement of different cell
+types while preserving stochasticity at both global and local scales.
 
-For the circular test layout, tumor cells are placed in a random ellipse
-(semi-axes $r_1 \in [0.1,0.4]$, $r_2 \in [0.1,0.4]$ of the half-domain)
-centred on the domain, and immune cells in two flanking ellipses at 20\%
-and 80\% of the $x$-axis (shuffled between T-cells and macrophages).
-For the rectangle layout, each cell type is placed uniformly in a vertical
-strip of width 10\% of the $x$-axis, with non-overlapping strip positions
-sampled from $[0.1,0.2]$, $[0.3,0.5]$, $[0.6,0.8]$ (shuffled across types).
-See \texttt{init\_conds\_v3.py} for the full implementation.
+\subsection*{Gaussian-Correlated Random Fields}
+
+Let $\Omega \subset \mathbb{Z}^2$ denote a two-dimensional spatial domain of
+size $N_x \times N_y$. A white noise field
+$\eta(\mathbf{x}) \sim \mathcal{N}(0,1)$, $\mathbf{x} \in \Omega$,
+is convolved with a Gaussian kernel
+\[
+  G_\sigma(\mathbf{r}) = \frac{1}{2\pi\sigma^2}
+  \exp\!\left(-\frac{\|\mathbf{r}\|^2}{2\sigma^2}\right),
+  \qquad \sigma = \frac{\ell_c}{\sqrt{2}},
+\]
+yielding the correlated field $F(\mathbf{x}) = (G_\sigma * \eta)(\mathbf{x})$,
+where $\ell_c$ is the prescribed spatial correlation length.
+Reflective boundary conditions are applied to avoid edge artifacts.
+
+\subsection*{Balanced Fields with Local Fluctuations}
+
+For each cell type $i$, a distinct field $F_i(\mathbf{x})$ is constructed by
+adding a locally filtered noise component $\tilde{\xi}_i = (G_{\ell_c/3} *
+\xi_i)(\mathbf{x})$ with small weight $\alpha$:
+\[
+  F_i(\mathbf{x}) = A\bigl[F(\mathbf{x}) + \alpha\,\tilde{\xi}_i(\mathbf{x})\bigr].
+\]
+Each field is then normalised and inverted:
+\[
+  \hat{F}_i(\mathbf{x}) =
+  \frac{\max(F_i) - F_i(\mathbf{x})}{\max(F_i) - \min(F_i)},
+  \quad \hat{F}_i \in [0,1].
+\]
+
+\subsection*{Probabilistic Cell Placement}
+
+$N_i$ cell positions are sampled from the region
+$\Omega_i = \{\mathbf{x} \mid \hat{F}_i(\mathbf{x}) > \theta_i\}$
+with probability proportional to $\hat{F}_i$:
+\[
+  P(\mathbf{x}) = \frac{\hat{F}_i(\mathbf{x})}
+  {\sum_{\mathbf{y}\in\Omega_i}\hat{F}_i(\mathbf{y})}.
+\]
+The procedure is repeated independently for each cell type.
+Parameters used: $\ell_c = 45$, $\theta = 0.55$, approximately 128 tumor
+cells, 32 T-cells, and 16 macrophages per episode.
+
+\section{Neural Architecture}
+\label{app:arch}
+
+We employ a modular neural architecture following an actor-critic paradigm,
+designed to accommodate heterogeneous observation modalities, including
+image-based and vector-based state representations. A shared feature extraction
+module encodes observations into a common latent representation, which is then
+used by separate policy (actor) and value (critic) networks.
+
+The feature extractor dynamically adapts to the observation type.
+Image-based inputs are processed through a convolutional encoder;
+vector observations are passed directly without transformation.
+In all cases, the extracted features are flattened into a fixed-dimensional
+latent vector that serves as the input to both actor and critic networks.
+
+\subsection*{IMPALA-style Convolutional Network}
+
+For image-based inputs we use an IMPALA-style convolutional
+network~\citep{espeholt2018impala}. The architecture consists of a stack of
+convolutional blocks. Each block comprises:
+\begin{itemize}
+  \item a $3\times3$ convolution,
+  \item a $3\times3$ max-pooling operation with stride 2,
+  \item two residual blocks with skip connections.
+\end{itemize}
+Each residual block applies two convolutional layers with Mish~\citep{misra2019mish}
+nonlinearities and preserves the input through identity shortcuts.
+This structure promotes stable gradient flow and enables deep feature
+hierarchies.
+
+\subsection*{Actor--Critic Networks}
+
+Both actor and critic share the same backbone after feature extraction:
+two fully connected layers of width 256 with Mish activations (critic)
+and ReLU activations (actor).
 
 \section{Asynchronous SAC}
 \label{app:async_sac}
@@ -709,23 +759,52 @@ See \texttt{init\_conds\_v3.py} for the full implementation.
 \caption{Asynchronous SAC with Parallel Environments~\citep{liu2025asynchronous}}
 \label{alg:async_sac}
 \begin{algorithmic}[1]
-\Require Config $d_\text{arg}$, buffer size $|\mathcal{B}|$, LRs, $\gamma$, $\tau$
-\State Init shared queues \texttt{actor\_queue}, \texttt{sample\_queue};
-       stop signal \texttt{stop\_event}
-\State \textbf{Actor Process (CPU):} init $N_\text{env}=9$ envs, local $\pi_{\theta_a}$
+\Require Simulator configuration $d_{\text{arg}}$, replay buffer size
+         $|\mathcal{B}|$, learning rates, discount factor $\gamma$,
+         target update rate $\tau$
+\Ensure Trained SAC policy $\pi_\theta$
+\State Initialize shared queues: \texttt{actor\_queue}, \texttt{sample\_queue}
+\State Initialize stop signal \texttt{stop\_event}
+\State Launch \textbf{Actor Process} (CPU)
+\Statex \quad Initialize vectorized environments $\mathcal{E}_1, \dots, \mathcal{E}_N$
+\Statex \quad Reset environments and obtain initial observations
+\Statex \quad Initialize local policy $\pi_{\theta_a}$
 \While{not \texttt{stop\_event}}
-  \State Receive $\theta$ from \texttt{actor\_queue} if available
-  \State Act: random if $t\!<\!T_\text{start}$, else $\pi_{\theta_a}$
-  \State Step envs; push $(s,a,r,s',d)$ to \texttt{sample\_queue}
+    \State Receive updated policy parameters from \texttt{actor\_queue} (if available)
+    \If{total steps $< t_{\text{start}}$}
+        \State Sample random actions
+    \Else
+        \State Sample actions from $\pi_{\theta_a}$
+    \EndIf
+    \State Step all environments in parallel
+    \State Collect transitions $(s, a, r, s', d)$
+    \State Send transition batches to \texttt{sample\_queue}
 \EndWhile
-\State \textbf{Learner Process (GPU):} init $\pi_\theta$, $Q_{\phi_{1,2}}$, targets, $\mathcal{D}$
+\State Initialize \textbf{Learner Process} (GPU)
+\State Initialize actor $\pi_\theta$, critics $Q_{\phi_1}, Q_{\phi_2}$
+\State Initialize target critics $Q_{\phi_1'} \leftarrow Q_{\phi_1}$,
+       $Q_{\phi_2'} \leftarrow Q_{\phi_2}$
+\State Initialize replay buffer $\mathcal{D}$
+\State Send initial policy parameters $\theta$ to actor via \texttt{actor\_queue}
 \While{total samples $< T$}
-  \State Drain \texttt{sample\_queue} into $\mathcal{D}$
-  \For{$N_\text{loops}$ gradient steps}
-    \State Sample minibatch; compute SAC target $y$; update $Q$, $\pi$, $\alpha$;
-           soft-update targets
-  \EndFor
-  \State Push updated $\theta$ to \texttt{actor\_queue}
+    \State Drain transitions from \texttt{sample\_queue} into $\mathcal{D}$
+    \If{$|\mathcal{D}| < \max(t_{\text{start}}, \text{batch size})$}
+        \State \textbf{continue}
+    \EndIf
+    \For{$N_{\text{loops}}$ gradient steps}
+        \State Sample minibatch from $\mathcal{D}$
+        \State Compute SAC target:
+        $y = r + \gamma (1-d)\bigl[\min(Q_{\phi_1'}, Q_{\phi_2'})
+             - \alpha \log \pi_\theta(a'|s')\bigr]$
+        \State Update critics $Q_{\phi_1}, Q_{\phi_2}$
+        \State Update actor $\pi_\theta$
+        \State Update entropy coefficient $\alpha$ (if enabled)
+        \State Soft-update targets:
+        $\phi' \leftarrow \tau \phi + (1-\tau)\phi'$
+    \EndFor
+    \If{policy update interval reached}
+        \State Send updated policy parameters to actor
+    \EndIf
 \EndWhile
 \end{algorithmic}
 \end{algorithm}
@@ -735,7 +814,7 @@ See \texttt{init\_conds\_v3.py} for the full implementation.
 
 \begin{table}[h]
   \centering\small
-  \caption{SAC hyperparameters (TME v2 experiments).}
+  \caption{SAC hyperparameters.}
   \label{tab:hyperparams}
   \begin{tabular}{lll}
     \toprule
