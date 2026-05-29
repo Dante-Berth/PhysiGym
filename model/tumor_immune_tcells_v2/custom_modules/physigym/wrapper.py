@@ -424,26 +424,29 @@ class PhysiCellModelWrapper(gym.Wrapper):
     def reset(self, seed=None, options=None, generation_cfg=None, no_generation_cfg=None, **kwargs):
         """
         Reset flow:
-        1. Determine train/test mode for the NEXT episode
-        2. Generate initial conditions (updates self.type_mode)
-        3. Save telemetry + video from the previous episode
+        1. Save telemetry + video from the PREVIOUS episode (uses current self.mode)
+        2. Determine train/test mode for the NEXT episode
+        3. Generate initial conditions (updates self.type_mode)
         4. Call inner reset
         5. Inject wrapper keys into info
         """
+        if seed is not None:
+            self.seed_val = seed
+
+        # 1. Save previous episode BEFORE flipping mode/generate flag
+        self.save_data()
+
+        # 2. Decide mode for the next episode
         next_episode = self.env.unwrapped.episode + 1
         self.mode = "test" if (next_episode % self.frequence_episode_test == 0) else "train"
         self.generate_physicell_data = (self.mode == "test")
 
-        if seed is not None:
-            self.seed_val = seed
-
+        # 3. Initial condition generation now sees the correct mode
         if generation_cfg is not None or self.generation_cfg is not None:
             self.initial_condition_generation(generation_cfg=generation_cfg)
 
         if no_generation_cfg is not None or self.no_generation_cfg is not None:
             self.initial_condition(no_generation_cfg=no_generation_cfg)
-
-        self.save_data()
 
         obs, info = self.env.reset(seed=seed, options=options)
 
@@ -529,6 +532,12 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.list_data     = []
         self._frame_buffer = []
 
+        # cleanup: keep only video.mp4 and *.csv in every episode folder
+        _KEEP = {".mp4", ".csv"}
+        for f in os.scandir(out_dir):
+            if f.is_file() and os.path.splitext(f.name)[1] not in _KEEP:
+                os.unlink(f.path)
+
         # PhysiCell never writes SVG or .mat files — all output comes from wrapper
         self.change_xml(
             keys=[
@@ -594,12 +603,8 @@ class PhysiCellModelWrapper(gym.Wrapper):
             capture_output=True,
         )
 
-        # cleanup: keep only video.mp4 and *.csv — remove everything else
-        _KEEP = {".mp4", ".csv"}
+        # remove temp frames/ folder; the broader cleanup is handled in save_data()
         shutil.rmtree(frames_dir, ignore_errors=True)
-        for f in os.scandir(out_dir):
-            if f.is_file() and os.path.splitext(f.name)[1] not in _KEEP:
-                os.unlink(f.path)
 
     def _episode_output_dir(self, run_idx: int) -> str:
         return os.path.join(

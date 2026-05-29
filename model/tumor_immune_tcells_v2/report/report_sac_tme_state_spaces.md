@@ -828,6 +828,41 @@ Across all three episodes, **I2 consistently achieves the best final tumour coun
 
 ---
 
+## 15. Visual "Chaos" vs. Quantitative Performance — run\_000164 (seed 32)
+
+A recurring observation when watching test-episode videos of `img_mc_cells_substrates` (I2) is that the policy **looks** more erratic than the corresponding `img_mc_cells` (I1) policy — frequent small action changes, jittery injection placement, less visually "decisive" behaviour. Yet the aggregated training/test curves in §6 are unambiguous: I2 wins on both training and test return.
+
+run\_000164 from seed 32 is included as a representative example of this phenomenon. Both videos are from the same matched test episode (same seed, same initial layout, same evaluation step):
+
+### Episode Videos — run\_000164
+
+> GitHub does not render `<video>` tags — click the links below to download or play the `.mp4` files directly.
+
+| Video | Link |
+|---|---|
+| I2 — `img_mc_cells_substrates` (seed 32) | [I2\_img\_mc\_cells\_substrates\_run000164\_seed32.mp4](https://raw.githubusercontent.com/Dante-Berth/PhysiGym/main/model/tumor_immune_tcells_v2/report/videos/I2_img_mc_cells_substrates_run000164_seed32.mp4) |
+| I1 — `img_mc_cells` (seed 32) | [I1\_img\_mc\_cells\_run000164\_seed32.mp4](https://raw.githubusercontent.com/Dante-Berth/PhysiGym/main/model/tumor_immune_tcells_v2/report/videos/I1_img_mc_cells_run000164_seed32.mp4) |
+
+### 15.1 Why I2 Looks Chaotic
+
+Several factors contribute to the visual impression that I2's policy is "noisier" than I1's:
+
+1. **More degrees of freedom in the observation.** I2 sees substrate gradients and the drug-1 concentration field that I1 cannot. The agent can make finer, more localised corrections in response to the diffusing drug plume and pro/anti-tumoral fields. These small corrections show up as frequent, small action changes rather than a single decisive injection — visually "twitchy" but quantitatively beneficial.
+
+2. **Feedback loop on the agent's own injections.** Because the `drug_1` channel is part of the I2 observation, the agent reacts to the consequences of its own past actions. A small dose at step *t* visibly changes the substrate field at step *t+1*, prompting another fine-tuning action. This self-referential dynamic produces high-frequency policy adjustments that look chaotic but reflect closed-loop control rather than open-loop dosing.
+
+3. **Reward composition rewards micro-adjustments.** The reward is `w_cell × tumour_drop − dose_spent`. A policy that places many small, precisely targeted doses along the tumour boundary out-performs a policy that delivers one large central dose — even if the latter looks "cleaner". The dose-cost term `−dose_spent` strongly penalises over-dosing, so optimal play involves careful, repeated micro-corrections.
+
+4. **Single-episode visual judgement is misleading.** Aggregated curves average over many episodes and modes (`circular`, `rectangle`, `network_field`). A chaotic-looking episode in isolation may still be a winning strategy in expectation. The visual coherence of I1 partly reflects the fact that I1 has no choice but to commit to a coarse strategy — it lacks the information to do anything finer.
+
+### 15.2 Take-Away
+
+The "chaos" is the symptom of a policy operating in a richer observation space with closed-loop feedback on its own perturbations. **The curves are the ground truth**, not the videos: cumulative return and final tumour count consistently favour I2 across seeds. The visual impression of erratic behaviour reflects the *information advantage* I2 has over I1, not a deficiency of the policy.
+
+If quantifying this is desired, the right metrics are **action-autocorrelation** and the per-step action delta `‖a_t − a_{t-1}‖`. A chaotic-but-better policy will have lower autocorrelation than I1 but higher cumulative return — making the "trade-off" between visual smoothness and performance explicit.
+
+---
+
 ## 16. W&B Training Curves & Observation Visualisations
 
 ### 16.1 Observation Mode Visualisation (I2 — `img_mc_cells_substrates`)
