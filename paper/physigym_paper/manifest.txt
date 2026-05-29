@@ -1,0 +1,39 @@
+%%
+%% Copyright 2022 OXFORD UNIVERSITY PRESS
+%%
+%% This file is part of the 'oup-authoring-template Bundle'.
+%% ---------------------------------------------
+%%
+%% It may be distributed under the conditions of the LaTeX Project Public
+%% License, either version 1.2 of this license or (at your option) any
+%% later version.  The latest version of this license is in
+%%    http://www.latex-project.org/lppl.txt
+%% and version 1.2 or later is part of all distributions of LaTeX
+%% version 1999/12/01 or later.
+%%
+%% The list of all files belonging to the 'oup-authoring-template Bundle' is
+%% given in the file `manifest.txt'.
+%%
+%% Template article for OXFORD UNIVERSITY PRESS's document class `oup-authoring-template'
+%% with bibliographic references
+%%
+
+% CONTENTS OF THE OUP-AUTHORING-TEMPLATE BUNDLE %
+=================================================
+
+Directory oup-authoring-template/
+
+oup-authoring-template.tex
+  article template for a document with author-year and numbered citation
+
+manifest.txt
+  this file
+
+README
+  small readme documentation
+
+Directory oup-authoring-template/doc/
+
+oup-authoring-template-doc.tex -- LaTeX source file of documentation
+oup-authoring-template-doc.pdf -- documentation for oup-authoring-template.cls
+
