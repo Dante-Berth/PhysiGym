@@ -307,6 +307,12 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.list_data            = []
         self._frame_buffer        = []   # list of dicts: {cells, subs, action, reward, dose, n_tumor}
         self._action_history      = []   # list of np.ndarray, one per env step in current episode
+        # IC + mode of the episode CURRENTLY running, captured at generation time
+        # so save_data() finalizes the finished episode with its own IC/mode,
+        # not the next episode's (which generation overwrites before save runs).
+        self._running_csv_init    = None
+        self._running_mode        = None
+        self._running_type_mode   = None
         self.generation_cfg       = None
         self.no_generation_cfg    = None
         self.generate_physicell_data = False
@@ -425,16 +431,20 @@ class PhysiCellModelWrapper(gym.Wrapper):
     def reset(self, seed=None, options=None, generation_cfg=None, no_generation_cfg=None, **kwargs):
         """
         Reset flow:
-        1. Save telemetry + video from the PREVIOUS episode (uses current self.mode)
+        1. Finalize the PREVIOUS episode (uses its captured mode/IC, not self.mode)
         2. Determine train/test mode for the NEXT episode
-        3. Generate initial conditions (updates self.type_mode)
-        4. Call inner reset
-        5. Inject wrapper keys into info
+        3. Generate initial conditions (updates self.type_mode / csv_path_init)
+        4. Capture the NEXT episode's mode/IC as "running" for the next save
+        5. Point //save/folder at the NEXT episode's own dir before inner reset
+        6. Call inner reset
+        7. Inject wrapper keys into info
         """
         if seed is not None:
             self.seed_val = seed
 
-        # 1. Save previous episode BEFORE flipping mode/generate flag
+        # 1. Finalize the PREVIOUS episode using ITS OWN captured mode/IC.
+        #    (self.mode / self.csv_path_init are about to be overwritten for the
+        #    next episode, so save_data must not rely on them.)
         self.save_data()
 
         # 2. Decide mode for the next episode
@@ -442,12 +452,30 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.mode = "test" if (next_episode % self.frequence_episode_test == 0) else "train"
         self.generate_physicell_data = (self.mode == "test")
 
-        # 3. Initial condition generation now sees the correct mode
+        # 3. Initial condition generation now sees the correct mode.
+        #    This updates self.csv_path_init and self.type_mode for the next episode.
         if generation_cfg is not None or self.generation_cfg is not None:
             self.initial_condition_generation(generation_cfg=generation_cfg)
 
         if no_generation_cfg is not None or self.no_generation_cfg is not None:
             self.initial_condition(no_generation_cfg=no_generation_cfg)
+
+        # 4. Capture what THIS upcoming episode runs with, so the NEXT reset's
+        #    save_data() finalizes it correctly even after generation moves on.
+        self._running_mode      = self.mode
+        self._running_type_mode = self.type_mode
+        self._running_csv_init  = self.csv_path_init
+
+        # 5. Point PhysiCell's native output at THIS episode's own folder before
+        #    the inner reset runs. Otherwise PhysiCell dumps its startup files
+        #    (svg/.mat/IC copy) into the PREVIOUS episode's directory — that is
+        #    how a train network_field IC leaked into a test episode folder.
+        upcoming_dir = self._episode_output_dir(next_episode)
+        os.makedirs(upcoming_dir, exist_ok=True)
+        self.change_xml(
+            keys=["//save/folder", "//save/SVG/enable", "//save/full_data/enable"],
+            elements=[upcoming_dir, "false", "false"],
+        )
 
         obs, info = self.env.reset(seed=seed, options=options)
 
@@ -576,7 +604,13 @@ class PhysiCellModelWrapper(gym.Wrapper):
         if run_idx < 0 or not self.list_data:
             return
 
-        out_dir = self._episode_output_dir(run_idx)
+        # Finalize using the mode/IC the FINISHED episode actually ran with —
+        # captured at its generation time. self.mode / self.csv_path_init have
+        # already been advanced for the next episode by this point.
+        finished_mode = self._running_mode if self._running_mode is not None else self.mode
+        finished_csv  = self._running_csv_init if self._running_csv_init is not None else self.csv_path_init
+
+        out_dir = self._episode_output_dir(run_idx, mode=finished_mode)
         os.makedirs(out_dir, exist_ok=True)
 
         df = pd.DataFrame(self.list_data)
@@ -587,34 +621,37 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
         df.to_csv(os.path.join(out_dir, "data.csv"), index=False)
         shutil.copy(
-            self.csv_path_init,
-            os.path.join(out_dir, os.path.basename(self.csv_path_init)),
+            finished_csv,
+            os.path.join(out_dir, os.path.basename(finished_csv)),
         )
 
+        finished_type_mode = (
+            self._running_type_mode if self._running_type_mode is not None else self.type_mode
+        )
         if self.generate_physicell_data and self._frame_buffer:
-            self._compile_video(out_dir, run_idx)
+            self._compile_video(out_dir, run_idx, type_mode=finished_type_mode)
 
         self.list_data     = []
         self._frame_buffer = []
 
-        # cleanup: keep only video.mp4 and *.csv in every episode folder
-        _KEEP = {".mp4", ".csv"}
+        # cleanup: keep only video.mp4 and the FINISHED episode's own IC.
+        # Any other CSV here (e.g. the next episode's IC copied by PhysiCell)
+        # would be a leak from a different mode — drop it.
+        keep_csv = os.path.basename(finished_csv)
         for f in os.scandir(out_dir):
-            if f.is_file() and os.path.splitext(f.name)[1] not in _KEEP:
-                os.unlink(f.path)
+            if not f.is_file():
+                continue
+            ext = os.path.splitext(f.name)[1]
+            if ext == ".mp4":
+                continue
+            if ext == ".csv" and f.name in {keep_csv, "data.csv"}:
+                continue
+            os.unlink(f.path)
 
-        # PhysiCell never writes SVG or .mat files — all output comes from wrapper
-        self.change_xml(
-            keys=[
-                "//save/folder",
-                "//save/SVG/enable",
-                "//save/full_data/enable",
-            ],
-            elements=[out_dir, "false", "false"],
-        )
-
-    def _compile_video(self, out_dir: str, run_idx: int):
+    def _compile_video(self, out_dir: str, run_idx: int, type_mode: str = None):
         """Render all buffered frames to PNG then compile to video.mp4 via ffmpeg."""
+        if type_mode is None:
+            type_mode = self.type_mode
         env_inner        = self.env.unwrapped
         cell_type_names  = list(env_inner.cell_type_to_id.keys())
         cell_type_colors = env_inner.cell_type_to_color
@@ -641,7 +678,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
                 action          = frame["action"],
                 step            = i,
                 episode         = episode,
-                type_mode       = self.type_mode,
+                type_mode       = type_mode,
                 reward_history  = list(reward_so_far),
                 dose_history    = list(dose_so_far),
                 x_min           = env_inner.x_min,
@@ -671,8 +708,8 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # remove temp frames/ folder; the broader cleanup is handled in save_data()
         shutil.rmtree(frames_dir, ignore_errors=True)
 
-    def _episode_output_dir(self, run_idx: int) -> str:
+    def _episode_output_dir(self, run_idx: int, mode: str = None) -> str:
         return os.path.join(
-            self.base_output_dir, self.mode,
+            self.base_output_dir, mode if mode is not None else self.mode,
             "episodes", f"run_{str(run_idx).zfill(6)}",
         )
