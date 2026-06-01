@@ -2,7 +2,6 @@
 # title: test_physigym_model.py
 #
 # language: python3 and command line
-# author: Alexandre Bertin, Elmar Bucher
 # date: 2025-01-20
 # license: BSD 3-Clause
 #

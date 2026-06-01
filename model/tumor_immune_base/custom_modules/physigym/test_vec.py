@@ -9,7 +9,6 @@ description:
       - runs on its own CPU core range (affinity pinned)
       - is wrapped in PhysiCellModelWrapper for simplified Box actions
 
-author: Alexandre Bertin (with ChatGPT), Elmar Bucher
 date: 2025
 """
 

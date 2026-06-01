@@ -7,7 +7,6 @@
 #
 # date: 2024-spring
 # license: bsb-3-clause
-# author: Alexandre Bertin, Elmar Bucher
 # input: https://gymnasium.farama.org/main/
 # original source code: https://github.com/Dante-Berth/PhysiGym
 #
