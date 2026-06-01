@@ -17,7 +17,7 @@ PhysiGym is still BETA!
 + Software dependencies: PhysiCell >= v1.14.2
 + Python library dependencies: gymnasium, lxml, matplotlib, numpy, pandas, (ipython, PyQt6)
 + Operating system dependencies: compiles on Linux, Windows Subsystem for Linux, and Mac OS X.
-+ Author: Alexandre Bertin, Elmar Bucher
++ Author: 
 + Date: 2024-spring
 + Doi:
 + License: [BSD-3-Clause](https://en.wikipedia.org/wiki/BSD_licenses)
@@ -74,18 +74,6 @@ Check out our preprint at bioRxiv.
 
 Within the PhysiGym library, we tried to stick to the documentation policy laid out by Daniele Procida in his "[what nobody tells you about documentation](https://www.youtube.com/watch?v=azf6yzuJt54)" talk at PyCon 2017 in Portland, Oregon.
 
-
-# Contributions:
-
-+ Concept and implementation: Alexandre Bertin, Elmar Bucher
-+ Involved: Emmanuel Rachelson, Heber Lima da Rocha, Marcelo Hurtado, Owen Griere, Paul Macklin, Randy Heiland, Vera Pancaldi, Vincent François
-
-If you like to contribute to the software with models or rl algorithms, please make a pull request to the [development branch](https://github.com/Dante-Berth/PhysiGym/tree/development).
-
-
-# Funding:
-
-This material is based upon research supported by the [Chateaubriand Fellowship](https://chateaubriand-fellowship.org/) from the Office for Science & Technology from the Embassy of France in the United States, the [Occitanie Region Toulouse](https://www.laregion.fr/), France, and [Inserm](https://www.inserm.fr/en/home/), France. This research was also supported in part by Lilly Endowment, Inc., through its support for the [Indiana University Pervasive Technology Institute](https://pti.iu.edu/).
 
 
 # Cite:
