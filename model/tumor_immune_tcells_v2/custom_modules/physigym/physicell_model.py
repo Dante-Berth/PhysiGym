@@ -999,7 +999,9 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         """
 
         expected_growth = self.c_prev * (np.exp(self.lambda_dt) - 1.0)
-        expected_growth = max(expected_growth, 1e-8)
+        # Floor at 1.0 so that killing the last few cells doesn't blow up the
+        # reward (when c_prev is tiny, expected_growth → 0 and r_tumor → ∞).
+        expected_growth = max(expected_growth, 1.0)
         r_tumor = (self.c_prev - self.c_t) / expected_growth
         return r_tumor
 

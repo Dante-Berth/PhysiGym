@@ -286,6 +286,8 @@ def generate_initial_condition(
         ),
         df.columns.get_loc("type"),
     ] = "cell_2"
+    df["x"] = df["x"].clip(x_min, x_max)
+    df["y"] = df["y"].clip(y_min, y_max)
     df = df.drop_duplicates(subset=["x", "y"], keep=False)
     df.to_csv(csv_path, index=False, float_format="%.6f")
     return df, mode
