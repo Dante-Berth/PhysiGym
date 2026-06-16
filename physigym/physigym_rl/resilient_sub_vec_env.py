@@ -2,7 +2,6 @@ import numpy as np
 from typing import Set, List
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv, _stack_obs
 import faulthandler
-
 faulthandler.enable()
 
 
@@ -11,7 +10,6 @@ faulthandler.enable()
 # ------------------------------------------------------------------
 class ToyEnv:
     """Safe placeholder for crashed environments."""
-
     def __init__(self, observation_space):
         self.observation_space = observation_space
         self.action_space = None
@@ -59,7 +57,7 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
         # Make mutable (parent stores as tuples)
         self.remotes = list(self.remotes)
         self.processes = list(self.processes)
-
+    
         # -------------------------------------------------------
         # Cache observation spaces NOW, before any env can crash.
         # This is the critical fix: _disable_env must never call
@@ -70,7 +68,6 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
     def get_modify_observation_space(self, observation_space):
         self.observation_space = observation_space
         self._obs_spaces = [self.observation_space] * self.num_envs
-
     # ------------------------------------------------------------------
     # Crash handling
     # ------------------------------------------------------------------
@@ -113,9 +110,7 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
         safe_indices = [i for i in indices if i not in self.dead_envs]
         if not safe_indices:
             return []
-        return super().env_method(
-            method_name, *method_args, indices=safe_indices, **method_kwargs
-        )
+        return super().env_method(method_name, *method_args, indices=safe_indices, **method_kwargs)
 
     # ------------------------------------------------------------------
     # Step
@@ -163,12 +158,7 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
         self.waiting = False
         obs, rews, dones, infos, self.reset_infos = zip(*results)
 
-        return (
-            _stack_obs(obs, self.observation_space),
-            np.stack(rews),
-            np.stack(dones),
-            infos,
-        )
+        return _stack_obs(obs, self.observation_space), np.stack(rews), np.stack(dones), infos
 
     # ------------------------------------------------------------------
     # Reset
