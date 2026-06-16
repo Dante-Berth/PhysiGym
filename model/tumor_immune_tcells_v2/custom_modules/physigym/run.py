@@ -132,7 +132,16 @@ def actor_process(
                     actions_tensor, _, _ = actor_local.get_action(x)
                 actions = actions_tensor.cpu().numpy()
 
-        next_obs, rewards, dones, infos = envs.step(actions)
+        # action repeat: apply the same action for action_repeat steps,
+        # accumulate rewards, use the final next_obs as the transition target
+        action_repeat = d_arg["rl"].get("action_repeat", 1)
+        accumulated_rewards = np.zeros(num_envs, dtype=np.float32)
+        for _rep in range(action_repeat):
+            next_obs, rewards, dones, infos = envs.step(actions)
+            accumulated_rewards += rewards.astype(np.float32)
+            if np.any(dones):
+                break  # stop repeating if any env is done
+        rewards = accumulated_rewards
 
         restarted = False
         if all(info.get("disabled", False) for info in infos):
@@ -151,7 +160,11 @@ def actor_process(
         if restarted:
             continue
 
-        episode_returns += rewards.astype(np.float64)
+        active_mask = np.ones(num_envs, dtype=np.float64)
+        for di in envs.dead_envs:
+            active_mask[di] = 0.0
+            episode_returns[di] = 0.0
+        episode_returns += rewards.astype(np.float64) * active_mask
         local_step      += num_envs - len(envs.dead_envs)
 
         batch_samples = []
@@ -174,12 +187,16 @@ def actor_process(
                 type_mode  = info.get("type_mode", "unknown")
                 try:
                     stats_queue.put_nowait({
-                        "episode_return": float(episode_returns[i]),
-                        "episode_length": int(step_ep),
-                        "step":           int(local_step),
-                        "timestamp":      time.time() - begin_time,
-                        "train_test":     train_test,
-                        "type_mode":      type_mode,
+                        "episode_return":         float(episode_returns[i]),
+                        "episode_length":         int(step_ep),
+                        "step":                   int(local_step),
+                        "timestamp":              time.time() - begin_time,
+                        "train_test":             train_test,
+                        "type_mode":              type_mode,
+                        # action-smoothness metrics from wrapper (0.0 if absent)
+                        "action_step_delta_mean": float(info.get("action_step_delta_mean", 0.0)),
+                        "action_step_delta_std":  float(info.get("action_step_delta_std",  0.0)),
+                        "action_autocorr_lag1":   float(info.get("action_autocorr_lag1",   0.0)),
                     })
                 except queue.Full:
                     pass
@@ -202,6 +219,88 @@ def actor_process(
         envs.close()
     except Exception:
         pass
+
+
+def run_random_policy(d_arg):
+    """Baseline: run a uniformly random policy, log episode stats, no learning."""
+    device_str = "cuda" if d_arg["simulation"]["cuda"] and torch.cuda.is_available() else "cpu"
+    print(f"[random] Running random policy baseline on {device_str}")
+
+    envs = vec_envs(d_arg)
+    obs  = envs.reset()
+
+    num_envs        = envs.num_envs
+    episode_returns = np.zeros(num_envs, dtype=np.float64)
+    total_steps     = d_arg["rl"]["total_timesteps"]
+    local_step      = 0
+
+    output_dir = d_arg["model"]["output_dir"]
+    writer     = SummaryWriter(log_dir=output_dir)
+
+    if d_arg["simulation"]["wandb_track"]:
+        run = wandb.init(
+            project=d_arg["wandb"]["project"] if "wandb" in d_arg else "SAC_ASYNC_TIP",
+            name=Path(output_dir).name,
+            config=d_arg,
+        )
+
+    pbar = tqdm(total=total_steps, dynamic_ncols=True)
+
+    action_repeat = d_arg["rl"].get("action_repeat", 1)
+
+    try:
+        while local_step < total_steps:
+            actions = np.array(
+                [envs.action_space.sample() for _ in range(num_envs)],
+                dtype=np.float32,
+            )
+
+            accumulated_rewards = np.zeros(num_envs, dtype=np.float32)
+            for _rep in range(action_repeat):
+                next_obs, rewards, dones, infos = envs.step(actions)
+                accumulated_rewards += rewards.astype(np.float32)
+                if np.any(dones):
+                    break
+            rewards = accumulated_rewards
+
+            active_mask = np.ones(num_envs, dtype=np.float64)
+            for di in envs.dead_envs:
+                active_mask[di] = 0.0
+                episode_returns[di] = 0.0
+            episode_returns += rewards.astype(np.float64) * active_mask
+            local_step += num_envs - len(envs.dead_envs)
+
+            for i in range(num_envs):
+                if i in envs.dead_envs:
+                    continue
+                info = infos[i]
+                if dones[i]:
+                    split    = info.get("train_test", "train")
+                    typemode = info.get("type_mode",  "unknown")
+                    ep_ret   = float(episode_returns[i])
+                    log_dict = {
+                        f"charts/{split}_return_raw":            ep_ret,
+                        f"charts/{split}_{typemode}_return_raw": ep_ret,
+                    }
+                    if d_arg["simulation"]["wandb_track"]:
+                        run.log(log_dict, step=local_step)
+                    else:
+                        for tag, val in log_dict.items():
+                            writer.add_scalar(tag, val, local_step)
+                    print(f"[random] step={local_step}  ep_return={ep_ret:.3f}  mode={split}/{typemode}")
+                    episode_returns[i] = 0.0
+
+            obs = next_obs
+            pbar.update(num_envs - len(envs.dead_envs))
+
+    except KeyboardInterrupt:
+        print("[random] Interrupted.")
+    finally:
+        pbar.close()
+        envs.close()
+        writer.close()
+        if d_arg["simulation"]["wandb_track"]:
+            wandb.finish()
 
 
 def run_async_sac(d_arg):
@@ -417,8 +516,10 @@ def run_async_sac(d_arg):
     # ── Training loop ───────────────────────────────────────────
     try:
         print("Starting training loop...")
-        pbar       = tqdm(total=total_timesteps, dynamic_ncols=True)
-        grad_steps = resume_grad_steps
+        pbar         = tqdm(total=total_timesteps, dynamic_ncols=True)
+        grad_steps   = resume_grad_steps
+        _prev_drained = 0
+        _grad_budget  = 0.0
 
         while drained < total_timesteps:
             pbar.update(drained - pbar.n)
@@ -442,14 +543,25 @@ def run_async_sac(d_arg):
 
                 return_buffers[split].append(ep_return)
 
+                a_delta_mean = stat.get("action_step_delta_mean", 0.0)
+                a_delta_std  = stat.get("action_step_delta_std",  0.0)
+                a_autocorr   = stat.get("action_autocorr_lag1",   0.0)
+
                 log_dict = {
                     f"charts/{split}_return_raw":            ep_return,
                     f"charts/{split}_{typemode}_return_raw": ep_return,
                     "charts/grad_steps":                     grad_steps,
+
+                    # action smoothness — split by train/test and by type_mode
+                    f"charts/{split}_action_delta_mean":             a_delta_mean,
+                    f"charts/{split}_action_delta_std":              a_delta_std,
+                    f"charts/{split}_action_autocorr_lag1":          a_autocorr,
+                    f"charts/{split}_{typemode}_action_delta_mean":  a_delta_mean,
+                    f"charts/{split}_{typemode}_action_autocorr":    a_autocorr,
                 }
 
                 buf = return_buffers[split]
-                if len(buf) >= 2:
+                if len(buf) >= len(buf)//2:
                     log_dict[f"charts/{split}_return_mean50"] = np.mean(buf)
                     log_dict[f"charts/{split}_return_std"]    = np.std(buf)
 
@@ -464,8 +576,20 @@ def run_async_sac(d_arg):
                 time.sleep(0.01)
                 continue
 
-            # ── Gradient updates (num_loops same as your original) ─
-            for _ in range(d_arg["rl"]["num_loops"]):
+            # ── Pace grad steps to drained (UTD = grad_utd) ──────
+            # Accumulate budget so the outer loop spinning faster than
+            # the drain thread never loses fractional credits.
+            grad_utd      = d_arg["rl"].get("grad_utd", 2.0)
+            _grad_budget += (drained - _prev_drained) * grad_utd
+            _prev_drained = drained
+            if _grad_budget < 1.0:
+                time.sleep(0.001)
+                continue
+            n_updates    = min(int(_grad_budget), d_arg["rl"]["num_loops"])
+            _grad_budget -= n_updates
+
+            # ── Gradient updates ─────────────────────────────────
+            for _ in range(n_updates):
                 with drain_lock:
                     if rb.size < batch_size:
                         break
@@ -584,21 +708,24 @@ if __name__ == "__main__":
 
     parser.add_argument("--settingxml",   default="config/PhysiCell_settings.xml")
     parser.add_argument("--settingcells", default="config/cells.csv")
-    parser.add_argument("--seed",         type=int,   default=1)
+    parser.add_argument("--seed",         type=int,   default=200)
     parser.add_argument("--gpu",          type=str,   default="true")
     parser.add_argument("--observation_mode",          default="transformer_nodes")
     parser.add_argument("--neural_architecture_image", default="impala")
     parser.add_argument("--max_time_episode",  type=float, default=7200.0)
     parser.add_argument("--learning_starts",   type=int,   default=5_000)
     parser.add_argument("--total_timesteps",   type=int,   default=int(5e5))
-    parser.add_argument("--rl_threads",        type=int,   default=3)
-    parser.add_argument("--num_envs",          type=int,   default=9)
-    parser.add_argument("--buffer_size",       type=int,   default=int(3e5))
+    parser.add_argument("--rl_threads",        type=int,   default=4)
+    parser.add_argument("--num_envs",          type=int,   default=13)
+    parser.add_argument("--buffer_size",       type=int,   default=int(2e5))
     parser.add_argument("--batch_size_multiplier", type=int, default=64)
     parser.add_argument("--num_loops",         type=int,   default=3)
     parser.add_argument("--policy_frequency",  type=int,   default=2)
     parser.add_argument("--target_network_frequency", type=int, default=1)
-    parser.add_argument("--checkpoint_frequency",     type=int, default=10_000)
+    parser.add_argument("--checkpoint_frequency",     type=int, default=50_000)
+    parser.add_argument("--grad_utd",                 type=float, default=1.0,
+                        help="Gradient steps per new env step (update-to-data ratio). "
+                             "1.0 = grads track drained. Same for all obs modes.")
     parser.add_argument("--resume",                   type=str, default=None,
                         help="Path to a .pt checkpoint produced by save_checkpoint() to resume from.")
     parser.add_argument("--name",    default="TME_V2")
@@ -610,6 +737,22 @@ if __name__ == "__main__":
     parser.add_argument("--frequence_episode_test", type=int,   default=4)
     parser.add_argument("--img_mc_grid_size",       type=int,   default=64)
     parser.add_argument("--w_cell",      type=float, default=0.3)
+    parser.add_argument("--w_smooth",    type=float, default=0.0,
+                        help="Weight for action-smoothness penalty: reward -= w_smooth * ||a_t - a_{t-1}||^2")
+    parser.add_argument("--action_repeat", type=int, default=1,
+                        help="Number of steps the same action is repeated (frame skip). Default 1 = no repeat.")
+    parser.add_argument("--delta_dose",   type=float, default=None,
+                        help="Max change in dose per step (normalised [0,1]). None = unconstrained.")
+    parser.add_argument("--delta_x",      type=float, default=None,
+                        help="Max change in x per step (normalised [0,1]). None = unconstrained.")
+    parser.add_argument("--delta_y",      type=float, default=None,
+                        help="Max change in y per step (normalised [0,1]). None = unconstrained.")
+    parser.add_argument("--delta_radius", type=float, default=None,
+                        help="Max change in radius per step (normalised [0,1]). None = unconstrained.")
+    parser.add_argument("--action_mode", type=str,   default="full")
+    parser.add_argument("--mode",        type=str,   default="train",
+                        choices=["train", "random"],
+                        help="'train' runs SAC; 'random' runs a random-policy baseline.")
 
     args = parser.parse_args()
 
@@ -627,7 +770,7 @@ if __name__ == "__main__":
 
     d_arg_wandb = {
         "entity":           args.entity,
-        "project":          "SAC_ASYNC_TME_Tcells",
+        "project":          "SAC_ASYNC_TME_Tcells_switch_init_cond",
         "sync_tensorboard": True,
         "monitor_gym":      True,
         "save_code":        True,
@@ -651,12 +794,38 @@ if __name__ == "__main__":
         "img_mc_grid_size_x":  args.img_mc_grid_size,
         "img_mc_grid_size_y":  args.img_mc_grid_size,
         "normalization_factor": args.tumor,
+        "action_mode":          args.action_mode,
     }
 
+    _var_names = (
+        ["drug_1_dose"]
+        if args.action_mode == "full"
+        else ["drug_1_dose", "drug_1_x", "drug_1_y", "drug_1_radius"]
+    )
+
+    # Build per-component delta-max array only when action_mode == "targeted"
+    # and at least one spatial delta limit is specified.
+    # Order matches _var_names: [dose, x, y, radius].
+    # Components left as None default to unconstrained (1.0 = full range).
+    if args.action_mode == "targeted" and any(
+        v is not None for v in [args.delta_dose, args.delta_x, args.delta_y, args.delta_radius]
+    ):
+        _action_delta_max = [
+            args.delta_dose   if args.delta_dose   is not None else 1.0,
+            args.delta_x      if args.delta_x      is not None else 1.0,
+            args.delta_y      if args.delta_y      is not None else 1.0,
+            args.delta_radius if args.delta_radius is not None else 1.0,
+        ]
+    else:
+        _action_delta_max = None
+
     d_arg_physigym_wrapper = {
-        "list_variable_name":     ["drug_1_dose", "drug_1_x", "drug_1_y", "drug_1_radius"],
+        "list_variable_name":     _var_names,
         "w_cell":                 args.w_cell,
+        "w_smooth":               args.w_smooth,
+        "action_delta_max":       _action_delta_max,
         "frequence_episode_test": args.frequence_episode_test,
+        "action_mode":            args.action_mode,
     }
 
     d_arg_rl = {
@@ -668,6 +837,8 @@ if __name__ == "__main__":
         "policy_frequency":         args.policy_frequency,
         "target_network_frequency": args.target_network_frequency,
         "checkpoint_frequency":     args.checkpoint_frequency,
+        "grad_utd":                 args.grad_utd,
+        "action_repeat":            args.action_repeat,
         "resume_path":              args.resume,
         "autotune":                 True,
         "alpha":                    0.05,
@@ -691,8 +862,8 @@ if __name__ == "__main__":
     d_arg_generation = {
         "params":     params,
         "seed":       i_seed,
-        "mode_train": ["network_field"],
-        "mode_test":  ["circular", "rectangle"],
+        "mode_train": ["rectangle"],
+        "mode_test":  ["rectangle"],
     }
 
     d_arg = {
@@ -711,7 +882,11 @@ if __name__ == "__main__":
         f"{d_arg['simulation']['name']}_"
         f"{d_arg['simulation']['seed']}_"
         f"{d_arg['model']['observation_mode']}_"
+        f"{d_arg['wrapper']['action_mode']}_"
         f"{int(time.time())}"
     )
 
-    run_async_sac(d_arg=d_arg)
+    if args.mode == "random":
+        run_random_policy(d_arg=d_arg)
+    else:
+        run_async_sac(d_arg=d_arg)
