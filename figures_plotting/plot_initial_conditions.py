@@ -33,9 +33,9 @@ DEFAULT_DATA = SCRIPT_DIR.parent.parent / "PhysiCell" / "data"
 DEFAULT_OUT  = SCRIPT_DIR.parent / "paper" / "ewrl_2026_physigym" / "img"
 
 # ── cell colours ──────────────────────────────────────────────────────────────
-COLORS = {"tumor": "#888888", "t_cell": "#e63946", "macrophage": "#4361ee"}
+COLORS = {"tumor": "#555555", "t_cell": "#e63946", "macrophage": "#2171b5"}
 LABELS = {"tumor": "Tumor", "t_cell": "T-cell", "macrophage": "Macrophage"}
-MARKER_SIZE = 8   # pt²
+MARKER_SIZE = 18   # pt²
 
 # ── exact IC CSV paths relative to data_dir ───────────────────────────────────
 IC_SPECS = {
@@ -117,8 +117,15 @@ def main():
         mpatches.Patch(color=COLORS[ct], label=LABELS[ct])
         for ct in ("tumor", "t_cell", "macrophage")
     ]
+    # legend with filled circles matching the scatter markers
+    import matplotlib.lines as mlines
+    legend_handles = [
+        mlines.Line2D([], [], color=COLORS[ct], marker='o', linestyle='None',
+                      markersize=7, label=LABELS[ct])
+        for ct in ("tumor", "t_cell", "macrophage")
+    ]
     fig.legend(
-        handles=handles,
+        handles=legend_handles,
         loc="lower center",
         ncol=3,
         fontsize=8.5,

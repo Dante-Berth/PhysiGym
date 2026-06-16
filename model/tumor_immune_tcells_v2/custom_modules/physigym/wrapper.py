@@ -5,7 +5,7 @@ import os
 import pandas as pd
 import shutil
 import subprocess
-from init_conds_v3 import generate_initial_condition
+from init_conds import generate_initial_condition
 from pathlib import Path
 
 
@@ -248,7 +248,10 @@ class PhysiCellModelWrapper(gym.Wrapper):
         env: gym.Env,
         list_variable_name: list[str] = ["drug_1_dose", "drug_1_x", "drug_1_y", "drug_1_radius"],
         w_cell=0.5,
+        w_smooth=0.0,
+        action_delta_max=None,
         frequence_episode_test=3,
+        action_mode: str = "targeted",
     ):
         """
         Wraps a PhysiCell environment to use a flat continuous Box action space.
@@ -274,6 +277,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         super().__init__(env)
 
         self.list_variable_name = list_variable_name
+        self.action_mode = action_mode
 
         # ── Action space ────────────────────────────────────────
         low  = np.array([env.action_space[v].low[0]  for v in list_variable_name])
@@ -283,7 +287,14 @@ class PhysiCellModelWrapper(gym.Wrapper):
             dtype=env.action_space[list_variable_name[0]].dtype,
         )
 
-        self.w_cell = w_cell
+        self.w_cell   = w_cell
+        self.w_smooth = w_smooth
+        # per-component max step in normalised [0,1] space; None = unconstrained
+        # for "targeted" mode components are [dose, x_norm, y_norm, radius_norm]
+        if action_delta_max is not None:
+            self._action_delta_max = np.asarray(action_delta_max, dtype=np.float32)
+        else:
+            self._action_delta_max = None
 
         # ── Paths ────────────────────────────────────────────────
         x_root = self.env.get_wrapper_attr("x_root")
@@ -489,6 +500,15 @@ class PhysiCellModelWrapper(gym.Wrapper):
         return obs, info
 
     def step(self, action: np.ndarray):
+        # hard delta-clip for spatial (and dose) components before anything else
+        # operates in the normalised [0,1] action space so delta_max is grid-relative
+        action = np.asarray(action, dtype=np.float32).copy()
+        if self._action_delta_max is not None and self._action_history:
+            prev = self._action_history[-1]
+            action = np.clip(action, prev - self._action_delta_max, prev + self._action_delta_max)
+            # re-clamp to the original action space bounds
+            action = np.clip(action, self._action_space.low, self._action_space.high)
+
         d_action = {v: np.array([val]) for v, val in zip(self.list_variable_name, action)}
 
         max_radius = np.sqrt(
@@ -496,9 +516,16 @@ class PhysiCellModelWrapper(gym.Wrapper):
             (self.env.unwrapped.height / 2) ** 2
         )
 
-        d_action["drug_1_x"]      = self.env.unwrapped.x_min + d_action["drug_1_x"]      * self.env.unwrapped.width
-        d_action["drug_1_y"]      = self.env.unwrapped.y_min + d_action["drug_1_y"]      * self.env.unwrapped.height
-        d_action["drug_1_radius"] = d_action["drug_1_radius"] * max_radius
+        if self.action_mode == "full":
+            cx = self.env.unwrapped.x_min + self.env.unwrapped.width  / 2
+            cy = self.env.unwrapped.y_min + self.env.unwrapped.height / 2
+            d_action["drug_1_x"]      = np.array([cx])
+            d_action["drug_1_y"]      = np.array([cy])
+            d_action["drug_1_radius"] = np.array([max_radius])
+        else:
+            d_action["drug_1_x"]      = self.env.unwrapped.x_min + d_action["drug_1_x"]      * self.env.unwrapped.width
+            d_action["drug_1_y"]      = self.env.unwrapped.y_min + d_action["drug_1_y"]      * self.env.unwrapped.height
+            d_action["drug_1_radius"] = d_action["drug_1_radius"] * max_radius
 
         obs, r_cancer_cells, terminated, truncated, info = self.env.step(d_action)
         dose_spent = self.env.unwrapped.get_wrapper_attr("get_dose_spent")()
@@ -510,7 +537,15 @@ class PhysiCellModelWrapper(gym.Wrapper):
             "train_test":   self.mode,
         })
 
-        reward = self.w_cell * r_cancer_cells - dose_spent
+        # action smoothness penalty: penalise abrupt changes between consecutive actions
+        action_arr = np.asarray(action, dtype=np.float32)
+        if self._action_history and self.w_smooth > 0.0:
+            prev_action = self._action_history[-1]
+            smooth_penalty = float(np.sum((action_arr - prev_action) ** 2))
+        else:
+            smooth_penalty = 0.0
+
+        reward = self.w_cell * r_cancer_cells - dose_spent - self.w_smooth * smooth_penalty
 
         # raw action components in [0, 1] — same values the video annotates
         action_dose   = float(action[0]) if len(action) > 0 else 0.0
@@ -519,7 +554,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         action_radius = float(action[3]) if len(action) > 3 else 0.0
 
         # track raw action vector for episode-end smoothness metrics
-        self._action_history.append(np.asarray(action, dtype=np.float32).copy())
+        self._action_history.append(action_arr.copy())
 
         row = {
             "step":          self.env.unwrapped.step_episode,
