@@ -1,5 +1,5 @@
 #####
-# title: pysigym/envs/physicell_core.py
+# title: physigym/envs/physicell_model.py
 #
 # language: python3
 # library: gymnasium v1.0.0a1
@@ -10,7 +10,8 @@
 # original source code: https://github.com/Dante-Berth/PhysiGym
 #
 # description:
-#     core of the custom_modules/extend module comaptible Gymnasium environment.
+#     model specific implementation of the custom_modules/extending module
+#     comaptible Gymnasium environment.
 # + https://gymnasium.farama.org/main/
 # + https://gymnasium.farama.org/main/introduction/create_custom_env/
 # + https://gymnasium.farama.org/main/tutorials/gymnasium_basics/environment_creation/
@@ -19,799 +20,1331 @@
 
 # library
 from extending import physicell
-import gymnasium
-from lxml import etree
+from gymnasium import spaces
 import matplotlib.pyplot as plt
-from matplotlib import colors
 import numpy as np
 import os
-import sys
-import tempfile
+import pandas as pd
+from physigym.envs.physicell_core import CorePhysiCellEnv
+import skimage as ski
+from tysserand import tysserand as ty
+from sklearn.cluster import KMeans
+import cv2
+from numpy.fft import fft2, fftshift
+from scipy.special import expit
+from scipy.spatial import cKDTree
 
-# global variable
-physicell.flag_envphysigym = False
-
-
-# classes
-class CorePhysiCellEnv(gymnasium.Env):
+# function
+class ModelPhysiCellEnv(CorePhysiCellEnv):
     """
     input:
-        gymnasium.Env
-
-    output:
         physigym.CorePhysiCellEnv
 
+    output:
+        physigym.ModelPhysiCellEnv
+
     run:
-        offspring: physigym.ModelPhysiCellEnv
+        import gymnasium
+        import physigym
+
+        env = gymnasium.make("physigym/ModelPhysiCellEnv")
+
+        o_observation, info = env.reset()
+        o_observation, r_reward, b_terminated, b_truncated, info = env.step(action={})
+        env.close()
 
     description:
-        this is the core physigym environment class, built on top of the
-        gymnasium.Env class. physigym.CorePhysiCellEnv class as such will be
-        the base class for every physigym.ModelPhysiCellEnv.
+        this is the model physigym environment class, built on top of the
+        physigym.CorePhysiCellEnv class, which is built on top of the
+        gymnasium.Env class.
 
-        there should be no need to edit the physigym.CorePhysiCellEnv class.
-        model specifics should be captured in the physigym.ModelPhysiCellEnv class.
+        fresh from the PhysiGym repo this is only a template class!
+        you will have to edit this class, to specify the model specific
+        reinforcement learning environment.
     """
 
-    ### begin dummy functions ###
-
-    def get_action_space(self):
-        raise NotImplementedError(
-            "get_action_space function to be implemented in physigym.ModelPhysiCellEnv!"
-        )
-
-    def get_observation_space(self):
-        raise NotImplementedError(
-            "get_observation_space function to be implemented in physigym.ModelPhysiCellEnv!"
-        )
-
-    def get_observation(self):
-        raise NotImplementedError(
-            "get_observation function to be implemented in physigym.ModelPhysiCellEnv!"
-        )
-
-    def get_info(self):
-        raise NotImplementedError(
-            "get_info function to be implemented in physigym.ModelPhysiCellEnv!"
-        )
-
-    def get_terminated(self):
-        raise NotImplementedError(
-            "get_terminated function to be implemented in physigym.ModelPhysiCellEnv!"
-        )
-
-    def get_reset_values(self):
-        raise NotImplementedError(
-            "get_reset_values function to be implemented in physigym.ModelPhysiCellEnv!"
-        )
-
-    def get_reward(self):
-        raise NotImplementedError(
-            "get_terminated function to be implemented in physigym.ModelPhysiCellEnv!"
-        )
-
-    def get_img(self):
-        raise NotImplementedError(
-            "get_img function to be implemented in physigym.ModelPhysiCellEnv!"
-        )
-
-    ### end dummy functions ###
-
-    # metadata
-    metadata = {
-        "render_modes": ["human", "rgb_array"],
-        "render_fps": None,
-    }
-
-    # functions
     def __init__(
         self,
         settingxml="config/PhysiCell_settings.xml",
         cell_type_cmap="turbo",
-        figsize=(8, 6),
+        figsize=(6, 6),  # inch
         render_mode=None,
         render_fps=10,
         verbose=True,
-        **kwargs,
+        # **kwargs
+        observation_mode="scalars_cells_substrates",
+        action_mode = "full",
+        img_rgb_grid_size_y=64,  # pixel
+        img_rgb_grid_size_x=64,  # pixel
+        img_mc_grid_size_x=64,  # pixel
+        img_mc_grid_size_y=64,  # pixel
+        normalization_factor=512,
+        k=1,
+        grid_n=8,
     ):
+        self.observation_mode = observation_mode
+        self.grid_n = grid_n
+        if "img" in observation_mode:
+            self.observation_mode = observation_mode + str(f"_{img_mc_grid_size_x}_{img_mc_grid_size_y}")
+        self.k = k
+        self.action_mode = action_mode
+
+        # call super class init
+        super().__init__(
+            settingxml=settingxml,
+            cell_type_cmap=cell_type_cmap,
+            figsize=figsize,
+            render_mode=render_mode,
+            render_fps=render_fps,
+            verbose=verbose,
+            # **kwargs
+            observation_mode=observation_mode,
+            img_rgb_grid_size_x=img_rgb_grid_size_x,
+            img_rgb_grid_size_y=img_rgb_grid_size_y,
+            img_mc_grid_size_x=img_mc_grid_size_x,
+            img_mc_grid_size_y=img_mc_grid_size_y,
+            normalization_factor=normalization_factor,
+        )
+        self.lambda_dt = float(
+            self.x_root.xpath("//user_parameters/growth_rate")[0].text
+        ) * float(self.x_root.xpath("//user_parameters/dt_gym")[0].text)
+
+    def get_action_space(self):
         """
         input:
-            settingxml: string; default is "config/PhysiCell_settings.xml"
-                path and filename to the settings.xml file.
-                the file will be loaded with lxml and stored at self.x_root.
-                therefor all data from the setting.xml file is later on accessible
-                via the self.x_root.xpath("//xpath/string/") xpath construct.
-                study this source code class for explicit examples.
-                for more information about xpath study the following links:
-                + https://en.wikipedia.org/wiki/XPath
-                + https://www.w3schools.com/xml/xpath_intro.asp
-                + https://lxml.de/xpathxslt.html#xpat
-
-            cell_type_cmap: dictionary of strings or string; default viridis.
-                dictionary that maps labels to colors strings.
-                matplotlib colormap string.
-                https://matplotlib.org/stable/tutorials/colors/colormaps.html
-
-            figsize: tuple of floats; default is (8, 6) which is a 4:3 ratio.
-                values are in inches (width, height).
-
-            render_mode: string as specified in the metadata or None; default is None.
-
-            render_fps: float or None; default is 10.
-                if render_mode is "human", for every dt_gym step the image,
-                specified in the physigym.ModelPhysiCellEnv.get_img() function,
-                will be generated and displayed. this frame per second setting
-                specifies the time the computer sleeps after the image is
-                displayed.
-                for example 10[fps] = 1/10[spf] = 0.1 [spf].
-
-            verbose: boolean
-                to set standard output verbosity true or false.
-                please note, only little from the standard output is coming
-                actually from physigym. most of the output comes straight
-                from PhysiCell and this setting has no influence over that output.
-
-            **kwargs:
-                possible additional keyword arguments input.
-                will be available in the instance through self.kwargs["key"].
 
         output:
-            initialized PhysiCell Gymnasium environment.
-
+            d_action_space: dictionary composition space
+                the dictionary keys have to match the parameter,
+                custom variable, or custom vector label.
+                the value has to be defined as gymnasium space object.
+                + https://gymnasium.farama.org/main/api/spaces/
         run:
-            import gymnasium
-            import physigym
-
-            env = gymnasium.make("physigym/ModelPhysiCellEnv")
-
-            env = gymnasium.make(
-                "physigym/ModelPhysiCellEnv",
-                settingxml = "config/PhysiCell_settings.xml",
-                figsize = (8, 6),
-                render_mode = None,
-                render_fps = 10,
-                verbose = True
-            )
+            internal function, user defined.
 
         description:
-            function to initialize the PhysiCell Gymnasium environment.
+            dictionary structure built out of gymnasium.spaces elements.
+            this struct has to specify type and range for each
+            action parameter, action custom variable, and action custom vector.
         """
-        # check global physigym environment flag
-        if physicell.flag_envphysigym:
-            raise RuntimeWarning(
-                f"per runtime, only one PhysiCellEnv gymnasium environment can be loaded. instance generation cancelled!"
+        if self.action_mode == "full":
+            d_action_space = spaces.Dict(
+                {
+                    "drug_1_dose": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                }
+            )
+        else:
+            d_action_space = spaces.Dict(
+                {
+                    "drug_1_dose": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                    "drug_1_x": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                    "drug_1_y": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                    "drug_1_radius": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+                }
             )
 
-        # handle verbose
-        self.verbose = verbose
-        if self.verbose:
-            print(f"physigym: initialize environment ...")
+        # output
+        return d_action_space
+    
+    def get_dose_spent(self):
+        return physicell.get_parameter("drug_1_amount_used")/(self.total_volume)
+    
+    def get_observation_space(self):
+        """
+        input:
 
-        # initialize class whide variables
-        if self.verbose:
-            print(f"physigym: declare class instance-wide variables.")
-        self.episode = -1
-        self.step_episode = None
-        self.step_env = 0
-        self.time_simulation = -1  # integer
-        if self.verbose:
-            print("physigym: self.episode", self.episode)
-            print("physigym: self.step_episode", self.step_episode)
-            print("physigym: self.step_env", self.step_env)
-            print("physigym: self.episode", self.episode)
+        output:
+            o_observation_space structure.
+                the struct have to be built out of gymnasium.spaces elements.
+                there are no other limits.
+                + https://gymnasium.farama.org/main/api/spaces/
 
-        # handle keyword arguments input
-        self.kwargs = kwargs
-        if self.verbose:
-            print("physigym: self.kwargs", sorted(self.kwargs))
+        run:
+            internal function, user defined.
 
-        # load PhysiCell settings.xml file
-        # bue 20241130: to gather full-time observation, increase the setting.xml max_time by dt_gym for one more action!
-        self.settingxml = settingxml
-        self.x_tree = etree.parse(self.settingxml)
-        if self.verbose:
-            print(f"physigym: reading {self.settingxml}")
-        self.x_root = self.x_tree.getroot()
+        description:
+            data structure built out of gymnasium.spaces elements.
+            this struct has to specify type and range
+            for each observed variable.
+        """
+        observation_mode = self.observation_mode
+        self.kwargs["img_mc_grid_size_x"] = self.kwargs["img_mc_grid_size_x"]
+        self.kwargs["img_mc_grid_size_y"] = self.kwargs["img_mc_grid_size_y"]
+        self.ratio_img_mc_size_y = self.height / self.kwargs["img_mc_grid_size_y"]
+        self.ratio_img_mc_size_x = self.width / self.kwargs["img_mc_grid_size_x"]
+        # model dependent observation_space processing logic goes here!
 
-        # handle render mode
-        if self.verbose:
-            print(f"physigym: declare render settings.")
-        assert render_mode is None or render_mode in self.metadata["render_modes"], (
-            f'"{render_mode}" is an unknown render_mode. known are {sorted(self.metadata["render_modes"])}, and None.'
-        )
-        self.render_mode = render_mode
-        self.metadata.update({"render_fps": render_fps})
-        if self.verbose:
-            print("physigym: self.render_mode", self.render_mode)
-            print("physigym: self.metadata", sorted(self.metadata))
-
-        # handle figsize
-        self.figsize = figsize
-        self.fig = None
-        self.axs = None
-
-        # Only create figure if rendering is enabled
-        if self.render_mode is not None:
-            import matplotlib.pyplot as plt  # local import avoids global font init
-            self.fig, self.axs = plt.subplots(figsize=self.figsize)
-
-        if self.verbose:
-            print("physigym: self.figsize", self.figsize)
-
-        if self.verbose:
-            print("physigym: self.figsize", self.figsize)
-
-        # handle domain
-        if self.verbose:
-            print(f"physigym: extract domain settings.")
-        self.x_min = int(float(self.x_root.xpath("//domain/x_min")[0].text))
-        self.x_max = int(float(self.x_root.xpath("//domain/x_max")[0].text))
-        self.y_min = int(float(self.x_root.xpath("//domain/y_min")[0].text))
-        self.y_max = int(float(self.x_root.xpath("//domain/y_max")[0].text))
-        self.z_min = int(float(self.x_root.xpath("//domain/z_min")[0].text))
-        self.z_max = int(float(self.x_root.xpath("//domain/z_max")[0].text))
-        self.dx = int(float(self.x_root.xpath("//domain/dx")[0].text))
-        self.dy = int(float(self.x_root.xpath("//domain/dy")[0].text))
-        self.dz = int(float(self.x_root.xpath("//domain/dz")[0].text))
-        self.width = self.x_max - self.x_min
-        self.height = self.y_max - self.y_min
-        self.depth = self.z_max - self.z_min
-        self.total_volume = self.width*self.height*self.depth
-        if self.verbose:
-            print("physigym: self.x_min", self.x_min)
-            print("physigym: self.x_max", self.x_max)
-            print("physigym: self.y_min", self.y_min)
-            print("physigym: self.y_max", self.y_max)
-            print("physigym: self.z_min", self.z_min)
-            print("physigym: self.z_max", self.z_max)
-            print("physigym: self.dx", self.dx)
-            print("physigym: self.dy", self.dy)
-            print("physigym: self.dz", self.dz)
-            print("physigym: self.width", self.width)
-            print("physigym: self.height", self.height)
-            print("physigym: self.depth", self.depth)
-            print("physigym: self.total_volume", self.total_volume)
-
-        # handle substrate mapping
-        if self.verbose:
-            print(f"physigym: extract substrate settings.")
-        self.substrate_to_id = dict(
-            zip(
-                self.x_root.xpath("//microenvironment_setup/variable/@name"),
-                [
-                    int(s_id)
-                    for s_id in self.x_root.xpath(
-                        "//microenvironment_setup/variable/@ID"
-                    )
-                ],
+        if self.observation_mode == "scalars_cells":
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(self.cell_type_count,),
+                dtype=np.float32,
             )
-        )
-        self.substrate_unique = sorted(
-            self.substrate_to_id.keys(), key=self.substrate_to_id.get
-        )
-        self.substrate_count = len(self.substrate_unique)
-        if self.verbose:
-            print("physigym: self.substrate_to_id", sorted(self.substrate_to_id))
-            print("physigym: self.substrate_unique", self.substrate_unique)
-            print("physigym: self.substrate_count", self.substrate_count)
 
-        # handle cell_type mapping
-        if self.verbose:
-            print(f"physigym: extract cell_type settings.")
-        self.cell_type_to_id = dict(
-            zip(
-                self.x_root.xpath("//cell_definitions/cell_definition/@name"),
-                [
-                    int(s_id)
-                    for s_id in self.x_root.xpath(
-                        "//cell_definitions/cell_definition/@ID"
-                    )
-                ],
+        elif self.observation_mode == "scalars_substrates":
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(self.substrate_count,),
+                dtype=np.float32,
             )
-        )
-        self.cell_type_unique = sorted(
-            self.cell_type_to_id.keys(), key=self.cell_type_to_id.get
-        )
-        self.cell_type_count = len(self.cell_type_unique)
-        # handle cell_type mapping
-        self.cell_type_to_color = {}
-        if isinstance(cell_type_cmap, dict):
-            for s_cell_type in self.cell_type_unique:
-                self.cell_type_to_color[s_cell_type] = cell_type_cmap.get(s_cell_type, "gray")
 
-        elif isinstance(cell_type_cmap, str):
-            import matplotlib.pyplot as plt
-            import matplotlib.colors as mcolors
-            cmap = plt.get_cmap(cell_type_cmap, self.cell_type_count)
-            for i, s_cell_type in enumerate(self.cell_type_unique):
-                self.cell_type_to_color[s_cell_type] = mcolors.to_hex(cmap.colors[i])
+        elif self.observation_mode in "scalars_cells_substrates":
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(self.cell_type_count + self.substrate_count,),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "scalars_macrophages":
+            # same as scalars_cells but macrophage count split into M1 + M2
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(self.cell_type_count + 1,),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "spatial_scalars_cells":
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(self.cell_type_count + self.cell_type_count * 6 * self.k,),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "spatial_scalars_cells_substrates":
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(self.cell_type_count + self.substrate_count + self.cell_type_count * 6 * self.k,),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "spatial_scalars_cells_spatial_substrates":
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(self.cell_type_count + self.substrate_count + self.substrate_count * 6 * self.k + self.cell_type_count * 6 * self.k,),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "spatial_scalars_cells_spatial_no_scalars_substrates":
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(self.cell_type_count + self.substrate_count * 6 * self.k + self.cell_type_count * 6 * self.k,),
+                dtype=np.float32,
+            )
+        elif self.observation_mode == f"kmeans_spatial_scalars_cells_substrates":
+            o_observation_space = spaces.Box(
+                    low=-(2**8),
+                    high=2**8,
+                    shape=(self.substrate_count * 6 * self.k + self.cell_type_count * 6 * self.k,),
+                    dtype=np.float32,
+            )
+
+        elif self.observation_mode == "occupancy_grid":
+            # grid_n x grid_n spatial bins per cell type + per substrate
+            # cells: fraction of total population per bin (co-localization aware)
+            # substrates: mean concentration per bin
+            n = self.grid_n
+            o_observation_space = spaces.Box(
+                low=0.0,
+                high=1.0,
+                shape=(self.cell_type_count * n * n + self.substrate_count * n * n,),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "relational":
+            # per-type:   5 (cx, cy, std_x, std_y, count_fraction)
+            # per-pair:   4 (distance, sin_angle, cos_angle, quadrant_overlap)
+            # per-subs:   4 (conc@tumor, grad_sin, grad_cos, mean_in_spread)
+            # per-(type,subs): 1 (mean conc at cell positions)
+            n_types = self.cell_type_count
+            n_subs  = self.substrate_count
+            n_pairs = n_types * (n_types - 1) // 2
+            dim = n_types * 5 + n_pairs * 4 + n_subs * 4 + n_types * n_subs * 1
+            o_observation_space = spaces.Box(
+                low=-1.0,
+                high=1.0,
+                shape=(dim,),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "cross_nn_relational":
+            # cross_nn block:  n_types * (n_types - 1) * 2  (mean + std nn dist per ordered pair)
+            # relational block: same as "relational"
+            n_types = self.cell_type_count
+            n_subs  = self.substrate_count
+            n_pairs = n_types * (n_types - 1) // 2
+            dim_relational = n_types * 5 + n_pairs * 4 + n_subs * 4 + n_types * n_subs * 1
+            # ordered pairs A→B and B→A (mean_nn_dist, std_nn_dist) each
+            dim_cross_nn = n_types * (n_types - 1) * 2
+            o_observation_space = spaces.Box(
+                low=-1.0,
+                high=1.0,
+                shape=(dim_relational + dim_cross_nn,),
+                dtype=np.float32,
+            )
+
+        elif observation_mode in [
+            f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
+            f"img_mc_cells_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
+            f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
+        ]:
+            if (
+                observation_mode
+                == f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+            ):
+                o_observation_space = spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(
+                        self.cell_type_count,
+                        self.kwargs["img_mc_grid_size_x"],
+                        self.kwargs["img_mc_grid_size_y"],
+                    ),
+                    dtype=np.uint8,
+                )
+            elif (
+                observation_mode
+                == f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+            ):
+                o_observation_space = spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(
+                        self.substrate_count,
+                        self.kwargs["img_mc_grid_size_x"],
+                        self.kwargs["img_mc_grid_size_y"],
+                    ),
+                    dtype=np.uint8,
+                )
+            else:
+                o_observation_space = spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(
+                        self.cell_type_count + self.substrate_count,
+                        self.kwargs["img_mc_grid_size_x"],
+                        self.kwargs["img_mc_grid_size_y"],
+                    ),
+                    dtype=np.uint8,
+                )
+    
         else:
             raise ValueError(
-                f"cell_type_cmap {cell_type_cmap} must be a dict of strings or a string."
+                f"unknown observation type: {self.kwargs['observation_mode']}"
             )
 
-        if self.verbose:
-            print("physigym: self.cell_type_to_id", sorted(self.cell_type_to_id))
-            print("physigym: self.cell_type_unique", self.cell_type_unique)
-            print("physigym: self.cell_type_count", self.cell_type_count)
-            print("physigym: self.cell_type_to_color", sorted(self.cell_type_to_color))
-
-        # handle spaces
-        if self.verbose:
-            print(f"physigym: declare action and observer space.")
-        self.action_space = self.get_action_space()
-        self.observation_space = self.get_observation_space()
-
-        # set global physigym enviroment flag
-        physicell.flag_envphysigym = True
-
         # output
-        if self.verbose:
-            print(f"physigym: ok!")
-
-    def render(self, **kwargs):
+        return o_observation_space
+    
+    def get_spatial_substrate_features(self):
         """
-        input:
-            self.get_img()
-
-            **kwargs:
-                possible additional keyword arguments input.
-                will be available in the instance through self.kwargs["key"].
-
-        output:
-            a_img: numpy array or None
-                if self.render_mode is
-                None: the function will return None.
-                rgb_array or human: the function will return a numpy array,
-                    8bit, shape (4,y,x) with red, green, blue, and alpha channel.
-        run:
-            import gymnasium
-            import physigym
-
-            env = gymnasium.make("physigym/ModelPhysiCellEnv", render_mode= None)
-            env = gymnasium.make("physigym/ModelPhysiCellEnv", render_mode="human")
-            env = gymnasium.make("physigym/ModelPhysiCellEnv", render_mode="rgb_array")
-
-            o_observation, d_info = env.reset()
-            env.render()
-
-        description:
-            function to render the image into an 8bit numpy array,
-            if render_mode is not None.
+        Per substrate: mean, std, min, max, and centroid (x_mean, y_mean)
+        of the concentration field.
+        Shape: (substrate_count * 6,)
         """
-        if self.verbose:
-            print(f"physigym: render {self.render_mode} frame ...")
+        n_subs = self.substrate_count
+        features = np.zeros((n_subs * 6,), dtype=np.float32)
 
-        # handle keyword arguments input
-        self.kwargs.update(kwargs)
-        if self.verbose and len(kwargs) > 0:
-            print("physigym: self.kwarg", sorted(self.kwarg))
+        x_range = self.x_max - self.x_min + 1e-8
+        y_range = self.y_max - self.y_min + 1e-8
 
-        # processing
-        a_img = None
+        for i, s_subs in enumerate(self.substrate_unique):
+            microenv = np.asarray(physicell.get_microenv(s_subs))
+            # columns: x, y, z, concentration
+            x    = (microenv[:, 0] - self.x_min) / x_range
+            y    = (microenv[:, 1] - self.y_min) / y_range
+            conc = microenv[:, -1]
 
-        if not (self.render_mode is None):  # human or rgb_array
-            self.fig.canvas.draw()
-            a_img = np.array(self.fig.canvas.buffer_rgba(), dtype=np.uint8)
+            total = conc.sum()
 
-        # output
-        if self.verbose:
-            print(f"ok!")
-        return a_img
+            if total < 1e-8:
+                # substrate absent — all zeros, agent learns this pattern
+                continue
 
-    def reset(self, seed=None, options={}, **kwargs):
-        """
-        input:
-            self.get_observation()
-            self.get_info()
-            self.get_img()
+            base = i * 6
+            features[base + 0] = conc.mean()
+            features[base + 1] = conc.std()
+            features[base + 2] = conc.min()
+            features[base + 3] = conc.max()
+            # concentration-weighted centroid
+            features[base + 4] = (conc * x).sum() / total  # x_centroid
+            features[base + 5] = (conc * y).sum() / total  # y_centroid
 
-            seed: integer or None; default is None
-                seed = None: generate random seeds for python and PhyiCell (via the setting.xml file).
-                seed < 0: take seed from setting.xml
-                seed >= 0: seed python and PhysiCell (via the setting.xml file) with this value.
+        return features
 
-            options: dictionary or None
-                reserved for possible future use.
+    def get_cells_scalars(self):
+        n_types = self.cell_type_count
+        a_norm_cell_count = np.zeros((n_types,), dtype=np.float32)
+        norm_factor = self.kwargs["normalization_factor"]
 
-        output:
-            o_observation: structure
-                the exact structure has to be
-                specified in the get_observation_space function.
-
-            d_info: dictionary
-                what information to be captured has to be
-                specified in the get_info function.
-
-        run:
-            import gymnasium
-            import physigym
-
-            env = gymnasium.make("physigym/ModelPhysiCellEnv")
-
-            o_observation, d_info = env.reset()
-
-        description:
-            The reset method will be called to initiate a new episode,
-            increment episode counter, reset episode step counter.
-            You may assume that the step method will not be called
-            before the reset function has been called.
-        """
-        if self.verbose:
-            print(f"\nphysigym: reset for episode {self.episode + 1} ...")
-
-        # handle random seeding
-        if seed is None:
-            i_seed = seed
-            if self.verbose:
-                print(f"physigym: set {self.settingxml} random_seed to 42.")
-            self.x_root.xpath("//random_seed")[0].text = "42"
-        # handle setting.xml based seeding
-        elif seed < 0:
-            s_seed = self.x_root.xpath("//random_seed")[0].text.strip()
-            i_seed = int(s_seed)
-        # handle Gymnasium based seeding
-        else:  # seed >= 0
-            i_seed = seed
-            if self.verbose:
-                print(f"physigym: set {self.settingxml} random_seed to {i_seed}.")
-            self.x_root.xpath("//random_seed")[0].text = str(i_seed)
-
-
-        # seed self.np_random number generator
-        super().reset(seed=i_seed)
-        if self.verbose:
-            print(f"physigym: seed random number generator with {i_seed}.")
-
-        # update class wide variables
-        if self.verbose:
-            print(f"physigym: update class instance-wide variables.")
-        self.episode += 1
-        self.step_episode = 0
-        # self.step_env NOP
-
-        # handle possible keyword arguments input
-        self.kwargs.update(kwargs)
-        if self.verbose and len(kwargs) > 0:
-            print("physigym: self.kwargs", sorted(self.kwargs))
-
-        # load reset values
-        self.get_reset_values()
-
-        # generate output folder
-        os.makedirs(self.x_root.xpath("//save/folder")[0].text, exist_ok=True)
-
-        # initialize physiCell model with the temp XML
-        if self.verbose:
-            print(f"physigym: declare PhysiCell model instance.")
-        physicell.start(self.settingxml, self.episode != 0)
-        # observe domain
-        if self.verbose:
-            print(f"physigym: domain observation.")
-        o_observation = self.get_observation()
-        d_info = self.get_info()
-
-        # render domain
-        if self.verbose:
-            print(f"physigym: render {self.render_mode} frame.")
-        if not (self.render_mode is None):
-            plt.ion()
-            self.get_img()
-            if self.render_mode == "human":  # human
-                if not (self.metadata["render_fps"] is None):
-                    plt.pause(1 / self.metadata["render_fps"])
-            else:  # rgb_array
-                try:
-                    self.fig.canvas.setVisible(False)
-                except AttributeError:  # handle agg backend on headless systems.
-                    pass
-
-        # output
-        if self.verbose:
-            print(
-                f"Warning: per runtime, only one PhysiCellEnv gymnasium environment can be generated.\n"
-                "to run another env, it will be necessary to fork or spawn the runtime!"
+        for s_cell_type, i_id in self.cell_type_to_id.items():
+            a_norm_cell_count[i_id] = (
+                self.df_alive.loc[self.df_alive.type == s_cell_type].shape[0]
+                / norm_factor
+                - 1
             )
-            print(f"physigym: ok!")
-        return o_observation, d_info
 
-    def get_truncated(self):
+        return a_norm_cell_count
+
+    def get_macrophage_polarization_scalars(self):
         """
-        input:
-            settingxml max_time
-            PhysiCell parameter time
+        Splits macrophages into M1 (anti-tumoral dominant) and M2 (pro-tumoral
+        dominant) by comparing substrate concentrations at each macrophage's
+        nearest microenvironment voxel.
 
-        output:
-            b_truncated: bool
+        Classification: pro_tumoral_factor > anti_tumoral_factor → M2, else M1.
 
-        run:
-            internal function.
-
-        description:
-            function to evaluate if the episode reached the max_time specified.
+        Returns a float32 array of shape (cell_type_count + 1,):
+          - all non-macrophage types keep their normalised count (same as
+            get_cells_scalars)
+          - the macrophage slot is replaced by two slots: [n_M1, n_M2]
+            both normalised by normalization_factor and shifted by -1
         """
-        # processing
-        b_truncated = False
-        # achtung: time has to be declared as parameter of type float in the settings.xml file!
-        r_time_simulation = physicell.get_parameter("time")
-        b_truncated = self.time_simulation == int(r_time_simulation)
-        self.time_simulation = int(r_time_simulation)
-        if self.verbose:
-            print(f"simulation time python3: {round(r_time_simulation, 3)}")
+        norm_factor = self.kwargs["normalization_factor"]
 
-        # output
-        return b_truncated
+        # ── fetch substrate voxel positions once ─────────────────
+        pro  = np.asarray(physicell.get_microenv("pro_tumoral_factor"))   # (N,4): x,y,z,conc
+        anti = np.asarray(physicell.get_microenv("anti_tumoral_factor"))  # (N,4)
 
-    def step(self, action, **kwargs):
-        """
-        input:
-            self.get_observation()
-            self.get_terminated()
-            self.get_truncated()
-            self.get_info(kwrags)
-            self.get_reward()
-            self.get_img()
+        voxel_xy  = pro[:, :2]                  # (N, 2)  x,y positions
+        pro_conc  = pro[:, -1]                  # (N,)
+        anti_conc = anti[:, -1]                 # (N,)
 
-            action: dict
-                object compatible with the defined action space struct.
-                the dictionary keys have to match the parameter,
-                custom variable, or custom vector label. the values are
-                either single or numpy arrays of bool, integer, float,
-                or string values.
+        tree = cKDTree(voxel_xy)
 
-            **kwargs:
-                possible additional keyword arguments input.
-                will be available in the instance through self.kwargs["key"].
+        # ── classify each alive macrophage ────────────────────────
+        df_mac = self.df_alive[self.df_alive["type"] == "macrophage"]
+        n_M1, n_M2 = 0, 0
 
-        output:
-            o_observation: structure
-                structure defined by the user in self.get_observation_space().
+        if len(df_mac) > 0:
+            mac_xy = df_mac[["x", "y"]].to_numpy()
+            _, nearest = tree.query(mac_xy)          # nearest voxel index per cell
+            is_M2 = pro_conc[nearest] > anti_conc[nearest]
+            n_M2 = int(is_M2.sum())
+            n_M1 = len(df_mac) - n_M2
 
-            r_reward: float or int or bool
-                algorithm defined by the user in self.get_reward().
-
-            b_terminated: bool
-                algorithm defined by the user in self.get_terminated().
-
-            b_truncated: bool
-                algorithm defined in self.get_truncated().
-
-            info: dict
-                algorithm defined by the user in self.get_info().
-
-            self.episode: integer
-                episode counter.
-
-            self.step_episode: integer
-                within an episode step counter.
-
-            self.step_env: integer
-                overall episodes step counter.
-
-        run:
-            import gymnasium
-            import physigym
-
-            env = gymnasium.make("physigym/ModelPhysiCellEnv")
-
-            o_observation, d_info = env.reset()
-            o_observation, r_reward, b_terminated, b_truncated, d_info = env.step(action={})
-
-        description:
-            function does a dt_gym simulation step:
-            apply action, increment the step counters, observes, retrieve reward,
-            and finalizes a PhysiCell episode, if episode is terminated or truncated.
-        """
-        if self.verbose:
-            print(f"physigym: taking a dt_gym time step ...")
-
-        # handle keyword arguments input
-        self.kwargs.update(kwargs)
-        if self.verbose and len(kwargs) > 0:
-            print("physigym: self.kwarg", sorted(self.kwarg))
-
-        # do action
-        if self.verbose:
-            print(f"physigym: action.")
-
-        # action is always a gymnasium composite space dict
-        for s_action, o_value in action.items():
-            # gymnasium composite space tuple: nop.
-            # gymnasium composite space sequences: nop.
-            # gymnasium composite space graph: nop.
-
-            # gymnasium action space discrete (boolean, integer)
-            # python/physicell api parametre, variable
-            if type(o_value) in {bool, int}:
-                try:
-                    # try custom_variable
-                    physicell.set_variable(s_action, o_value)
-                except KeyError:
-                    # try parameter
-                    try:
-                        physicell.set_parameter(s_action, o_value)
-                    # error
-                    except KeyError:
-                        sys.exit(
-                            f"Error @ physigym.envs.physicell_core.CorePhysiCellEnv : unprocessable Gymnasium discrete action space value detected! {s_action} {o_value} {type(o_value)}.\nIn the PhysiCell_setting.xml, have you specified a {s_action} parameter, custom_variable, or custom_vector?"
-                        )
-
-            # gymnasium action space text (string)
-            # python/physicell api parameter, variable
-            elif type(o_value) in {str}:
-                try:
-                    # try custom_variable
-                    physicell.set_variable(s_action, o_value)
-                except KeyError:
-                    # try parameter
-                    try:
-                        physicell.set_parameter(s_action, o_value)
-                    # error
-                    except KeyError:
-                        sys.exit(
-                            f"Error @ physigym.envs.physicell_core.CorePhysiCellEnv : unprocessable Gymnasium text action space value detected! {s_action} {o_value} {type(o_value)}.\nIn the PhysiCell_setting.xml, have you specified a {s_action} parameter, custom_variable, or custom_vector?"
-                        )
-
-            # gymnasium action space box (bool, int, float in a numpy array)
-            # gymnasium action space multi binary (boolean in a numpy array)
-            # gymnasium action space multi discrete (boolean, integer in a numpy array)
-            # python/physicell api parameter, variabler, vector
-            elif type(o_value) in {np.ndarray}:
-                if len(o_value.shape) > 1:
-                    o_value = o_value[0]
-                try:
-                    # try vector
-                    physicell.set_vector(s_action, list(o_value))
-                except KeyError:
-                    # try custom_variable
-                    try:
-                        physicell.set_variable(s_action, o_value)
-                    # try parameter
-                    except KeyError:
-                        try:
-                            physicell.set_parameter(s_action, o_value)
-                        # error
-                        except KeyError:
-                            sys.exit(
-                                f"Error @ physigym.envs.physicell_core.CorePhysiCellEnv : unprocessable Gymnasium box action space value detected! {s_action} {o_value} {type(o_value)}.\nIn the PhysiCell_setting.xml, have you specified a {s_action} parameter, custom_variable, or custom_vector?"
-                            )
-
-            # error
+        # ── build output: non-mac counts + M1 + M2 ───────────────
+        features = []
+        for s_cell_type, i_id in sorted(self.cell_type_to_id.items(), key=lambda kv: kv[1]):
+            if s_cell_type == "macrophage":
+                features.append(n_M1 / norm_factor - 1.0)
+                features.append(n_M2 / norm_factor - 1.0)
             else:
-                sys.exit(
-                    f"Error @ physigym.envs.physicell_core.CorePhysiCellEnv : unprocessable Gymnasium action space value detected! {s_action} {o_value} {type(o_value)}."
-                )
+                n = self.df_alive[self.df_alive["type"] == s_cell_type].shape[0]
+                features.append(n / norm_factor - 1.0)
 
-        # do dt_gym time step
-        if self.verbose:
-            print(f"physigym: PhysiCell model step.")
-        physicell.step()
+        return np.array(features, dtype=np.float32)
 
-        # update class whide variables
-        if self.verbose:
-            print(f"physigym: update class instance-wide variables.")
-        # self.episode NOP
-        self.step_episode += 1
-        self.step_env += 1
+    def get_substrates_scalars(self):
+        a_substrate = np.zeros(self.substrate_count, dtype=np.float32)
 
-        # get observation
-        if self.verbose:
-            print(f"physigym: domain observation.")
+        for i, s_subs in enumerate(self.substrate_unique):
+            microenv = np.asarray(physicell.get_microenv(s_subs))
+            values = microenv[:, -1]  # substrate column
+            a_substrate[i] = np.max(values)
 
-        o_observation = self.get_observation()
-        b_terminated = self.get_terminated()
-        b_truncated = self.get_truncated()
-        r_reward = self.get_reward()
-        d_info = self.get_info()
+        return a_substrate
 
-        # do rendering
-        if self.verbose:
-            print(f"physigym: render {self.render_mode} frame.")
-        if not (self.render_mode is None):  # human or rgb_array
-            self.get_img()
-            if (self.render_mode == "human") and not (
-                self.metadata["render_fps"] is None
-            ):
-                plt.pause(1 / self.metadata["render_fps"])
+    def get_matrix(self, df):
+        cell_type_indices = df["type"].map(self.cell_type_to_id).to_numpy()
+        # discretize
+        x_bin = (
+            (df["x"] - self.x_min)
+            / (self.width )
+            * (self.kwargs["img_mc_grid_size_x"] - 1)
+        ).astype(int)
+        y_bin = (
+            (df["y"] - self.y_min)
+            / (self.height)
+            * (self.kwargs["img_mc_grid_size_y"] - 1)
+        ).astype(int)
 
-        # check if episode finish
-        if b_terminated or b_truncated:
-            if self.verbose:
-                print(
-                    f"physigym: PhysiCell model episode finish by termination ({b_terminated}) or truncation ({b_truncated})."
-                )
-            physicell.stop()
+        # FIXED: clip to size - 1 (e.g., 63, not 64)
+        x_bin = np.clip(x_bin, 0, self.kwargs["img_mc_grid_size_x"] - 1)
+        y_bin = np.clip(y_bin, 0, self.kwargs["img_mc_grid_size_y"] - 1)
 
-        # output
-        if self.verbose:
-            print(f"physigym: ok!")
-        return o_observation, r_reward, b_terminated, b_truncated, d_info
+        # get numpy array
+        image = np.zeros(
+            shape=(
+                self.cell_type_count,
+                self.kwargs["img_mc_grid_size_x"],
+                self.kwargs["img_mc_grid_size_y"],
+            ),
+            dtype=np.float32,
+        )
+        np.add.at(
+            image,
+            (cell_type_indices, x_bin, y_bin),
+            1,
+        )
+        
+        # FIXED: Prevent floats > 1.0 from crashing ski.util.img_as_ubyte
+        scaled_image = image / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y)
+        clipped_image = np.clip(scaled_image, 0.0, 1.0)
+        
+        return ski.util.img_as_ubyte(clipped_image)
 
-    def close(self, **kwargs):
-        """
-        input:
-            **kwargs:
-                possible additional keyword arguments input.
-                will be available in the instance through self.kwargs["key"].
 
-        output:
+    def get_matrix_cells(self):
+        df = self.df_alive
+        return self.get_matrix(df=df)
 
-        run:
-            import gymnasium
-            import physigym
-
-            env = gymnasium.make("physigym/ModelPhysiCellEnv")
-
-            env.close()
-
-        description:
-            function to drop shutdown physigym environment.
-        """
-        if self.verbose:
-            print(f"physigym: environment closure ...")
-
-        # handle keyword arguments input
-        self.kwargs.update(kwargs)
-        if self.verbose and len(kwargs) > 0:
-            print("physigym: self.kwarg", sorted(self.kwarg))
-
-        # processing
-        if self.verbose:
-            print(f"physigym: Gymnasium PhysiCell model environment is going down.")
-        if not (self.render_mode is None):
-            plt.close(self.fig)
-
-        # output
-        if self.verbose:
-            print(
-                f"Warning: per runtime, only one PhysiCellEnv gymnasium environment can be generated.\nto run another env, it will be necessary to fork or spawn the runtime!"
+    def get_matrix_substrates(self):
+        self.df_subs = None
+        for s_subs in self.substrate_unique:
+            df_subs = pd.DataFrame(
+                physicell.get_microenv(s_subs), columns=["x", "y", "z", s_subs]
             )
-            print(f"physigym: ok!")
+            if self.df_subs is None:
+                self.df_subs = df_subs
+            else:
+                self.df_subs = pd.merge(self.df_subs, df_subs, on=["x", "y", "z"])
+        # discretize
+        self.df_subs["x_bin"] = (
+            (
+                (self.df_subs["x"] - self.x_min)
+                / (self.width)
+                * (self.kwargs["img_mc_grid_size_x"] - 1)
+            )
+            .astype(int)
+            .clip(0, self.kwargs["img_mc_grid_size_x"] - 1)
+        )
+        self.df_subs["y_bin"] = (
+            (
+                (self.df_subs["y"] - self.y_min)
+                / (self.height)
+                * (self.kwargs["img_mc_grid_size_y"] - 1)
+            )
+            .astype(int)
+            .clip(0, self.kwargs["img_mc_grid_size_y"] - 1)
+        )
 
-    def verbose_true(self):
+        grouped = self.df_subs.groupby(["x_bin", "y_bin"])[self.substrate_unique].max()
+
+        # initialize image
+        image = np.zeros(
+            (
+                len(self.substrate_unique),
+                self.kwargs["img_mc_grid_size_x"],
+                self.kwargs["img_mc_grid_size_y"],
+            ),
+            dtype=np.float32,
+        )
+
+        # fill image
+        for i, subs in enumerate(self.substrate_unique):
+            for (x_bin, y_bin), value in grouped[subs].items():
+                image[i, x_bin, y_bin] = value
+
+        return ski.util.img_as_ubyte(np.clip(image,0,1))
+    
+    def get_spatial_substrate_features(self):
+        """
+        Finds the top K hotspots for each substrate using concentration-weighted K-Means.
+        Includes a presence flag and mass fraction for each hotspot.
+        """
+        n_subs = self.substrate_count
+        k_clusters = self.k
+        features_per_cluster = 6  # [presence, mass_fraction, cx, cy, std_x, std_y]
+        
+        features = np.zeros((n_subs * k_clusters * features_per_cluster,), dtype=np.float32)
+
+        x_range = self.x_max - self.x_min + 1e-8
+        y_range = self.y_max - self.y_min + 1e-8
+
+        for i, s_subs in enumerate(self.substrate_unique):
+            microenv = np.asarray(physicell.get_microenv(s_subs))
+            base_idx = i * k_clusters * features_per_cluster
+
+            x = (microenv[:, 0] - self.x_min) / x_range
+            y = (microenv[:, 1] - self.y_min) / y_range
+            conc = microenv[:, -1]
+
+            total_mass = conc.sum()
+            
+            # Filter out background noise to speed up K-Means
+            # Only cluster points that have at least 1% of the max concentration
+            max_conc = conc.max()
+            threshold = 0.01 * max_conc if max_conc > 1e-8 else 1.0
+            mask = conc > threshold
+
+            if total_mass < 1e-8 or not mask.any():
+                # Substrate absent — array stays 0.0
+                continue
+
+            valid_x = x[mask]
+            valid_y = y[mask]
+            valid_conc = conc[mask]
+            coords = np.column_stack((valid_x, valid_y))
+
+            actual_k = min(k_clusters, len(valid_x))
+
+            # The Edge: Weight the K-Means points by their chemical concentration
+            kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init=1)
+            labels = kmeans.fit_predict(coords, sample_weight=valid_conc)
+            centers = kmeans.cluster_centers_
+
+            cluster_stats = []
+            for c in range(actual_k):
+                c_mask = (labels == c)
+                if not c_mask.any():
+                    continue
+                    
+                c_conc = valid_conc[c_mask]
+                c_x = valid_x[c_mask]
+                c_y = valid_y[c_mask]
+
+                presence = 1.0
+                mass_fraction = c_conc.sum() / total_mass
+                cx, cy = centers[c]
+
+                # Weighted standard deviation to measure the spread of the plume
+                if len(c_conc) > 1 and c_conc.sum() > 0:
+                    c_std_x = np.sqrt(np.average((c_x - cx)**2, weights=c_conc))
+                    c_std_y = np.sqrt(np.average((c_y - cy)**2, weights=c_conc))
+                else:
+                    c_std_x, c_std_y = 0.0, 0.0
+
+                cluster_stats.append((presence, mass_fraction, cx, cy, c_std_x, c_std_y))
+
+            # Sort hotspots descending by mass fraction (largest hotspot → slot 0)
+            cluster_stats.sort(key=lambda item: item[1], reverse=True)
+
+            # Populate array
+            for c, stats in enumerate(cluster_stats):
+                idx = base_idx + (c * features_per_cluster)
+                features[idx : idx + features_per_cluster] = stats
+
+        return features
+
+    def get_spatial_features(self):
+        """
+        Extracts spatial features using K-Means clustering.
+        Sorted by global weight, with an explicit presence flag per cluster.
+        Cluster mass is normalized against the total cell population.
+        """
+        n_types = self.cell_type_count
+        k_clusters = self.k
+        features_per_cluster = 6  # [presence, global_weight, cx, cy, std_x, std_y]
+        
+        features = np.zeros((n_types * k_clusters * features_per_cluster,), dtype=np.float32)
+
+        # The Edge: Get total alive cells across ALL types for true global normalization
+        total_alive_cells = len(self.df_alive)
+
+        for s_cell_type, i_id in self.cell_type_to_id.items():
+            df_type = self.df_alive[self.df_alive["type"] == s_cell_type]
+            base_idx = i_id * k_clusters * features_per_cluster
+            
+            n_cells = len(df_type)
+            if n_cells == 0 or total_alive_cells == 0:
+                # Type absent — all k_clusters stay 0.0 (presence = 0.0)
+                continue
+                
+            x = (df_type["x"].to_numpy() - self.x_min) / self.width
+            y = (df_type["y"].to_numpy() - self.y_min) / self.height
+            coords = np.column_stack((x, y))
+            
+            actual_k = min(k_clusters, n_cells)
+            kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init=1)
+            labels = kmeans.fit_predict(coords)
+            centers = kmeans.cluster_centers_
+            
+            cluster_stats = []
+            for c in range(actual_k):
+                c_mask = (labels == c)
+                c_coords = coords[c_mask]
+                
+                presence = 1.0  
+                
+                # Normalizing cluster size by the TOTAL cell population
+                global_weight = len(c_coords) / total_alive_cells
+                
+                cx, cy = centers[c]
+                
+                c_std_x = c_coords[:, 0].std() if len(c_coords) > 1 else 0.0
+                c_std_y = c_coords[:, 1].std() if len(c_coords) > 1 else 0.0
+                    
+                cluster_stats.append((presence, global_weight, cx, cy, c_std_x, c_std_y))
+            
+            # Sort descending by global weight to maintain stability in the state array
+            cluster_stats.sort(key=lambda item: item[1], reverse=True)
+            
+            # Populate array
+            for c, stats in enumerate(cluster_stats):
+                idx = base_idx + (c * features_per_cluster)
+                features[idx : idx + features_per_cluster] = stats
+                
+        return features
+
+    def get_relational_features(self):
+        """
+        48-dimensional interpretable relational state vector.
+
+        Block 1 — per cell type (5 each):
+          cx, cy           : concentration-weighted centroid, normalised to [0,1]
+          std_x, std_y     : spread of cell positions, normalised by domain size
+          count_fraction   : fraction of total alive population
+
+        Block 2 — per ordered pair of cell types (4 each, C(n,2) pairs):
+          distance         : Euclidean centroid distance, normalised by domain diagonal
+          sin_angle        : sine of angle from type-A centroid to type-B centroid
+          cos_angle        : cosine of same angle
+          quadrant_overlap : fraction of cells of type-A in same quadrant as type-B centroid
+
+        Block 3 — per substrate, drug-relative (4 each):
+          conc_at_tumor    : mean substrate concentration at tumor cell positions
+          grad_sin         : sin of direction of max concentration gradient
+          grad_cos         : cos of same gradient direction
+          mean_in_spread   : mean concentration within 1-std radius of tumor centroid
+
+        Block 4 — per (cell type, substrate) cross (1 each):
+          mean_conc_at_type: mean substrate concentration sampled at each cell's position
+        """
+        x_range  = self.x_max - self.x_min + 1e-8
+        y_range  = self.y_max - self.y_min + 1e-8
+        diagonal = np.sqrt(x_range**2 + y_range**2) + 1e-8
+        total_alive = max(len(self.df_alive), 1)
+
+        # ── Pre-compute per-type centroids and spreads ────────────
+        type_names = list(self.cell_type_to_id.keys())  # stable order
+        centroids  = {}   # name → (cx_norm, cy_norm)
+        spreads    = {}   # name → (sx_norm, sy_norm)
+        counts     = {}   # name → int
+
+        for s in type_names:
+            df_t = self.df_alive[self.df_alive["type"] == s]
+            n = len(df_t)
+            counts[s] = n
+            if n == 0:
+                centroids[s] = (0.5, 0.5)   # domain centre as neutral
+                spreads[s]   = (0.0, 0.0)
+            else:
+                cx = (df_t["x"].mean() - self.x_min) / x_range
+                cy = (df_t["y"].mean() - self.y_min) / y_range
+                sx = df_t["x"].std(ddof=0) / x_range if n > 1 else 0.0
+                sy = df_t["y"].std(ddof=0) / y_range if n > 1 else 0.0
+                centroids[s] = (float(cx), float(cy))
+                spreads[s]   = (float(sx), float(sy))
+
+        # ── Block 1: per-type features ────────────────────────────
+        block1 = []
+        for s in type_names:
+            cx, cy = centroids[s]
+            sx, sy = spreads[s]
+            cf     = counts[s] / total_alive
+            block1.extend([cx, cy, sx, sy, cf])
+
+        # ── Block 2: per-pair relational features ─────────────────
+        block2 = []
+        for i in range(len(type_names)):
+            for j in range(i + 1, len(type_names)):
+                sa, sb = type_names[i], type_names[j]
+                ax, ay = centroids[sa]
+                bx, by = centroids[sb]
+
+                dx = bx - ax
+                dy = by - ay
+                dist  = np.sqrt(dx**2 + dy**2) / np.sqrt(2.0)   # max diagonal in [0,1]² = sqrt(2)
+                angle = np.arctan2(dy, dx)
+                sin_a = float(np.sin(angle))
+                cos_a = float(np.cos(angle))
+
+                # fraction of type-A cells in the same quadrant as type-B centroid
+                df_a = self.df_alive[self.df_alive["type"] == sa]
+                if len(df_a) == 0:
+                    overlap = 0.0
+                else:
+                    # quadrant defined by domain centre
+                    qx = bx > 0.5   # type-B is left or right half
+                    qy = by > 0.5
+                    xa_norm = (df_a["x"].to_numpy() - self.x_min) / x_range
+                    ya_norm = (df_a["y"].to_numpy() - self.y_min) / y_range
+                    in_q = ((xa_norm > 0.5) == qx) & ((ya_norm > 0.5) == qy)
+                    overlap = float(in_q.mean())
+
+                block2.extend([float(dist), sin_a, cos_a, overlap])
+
+        # ── Pre-compute substrate microenv arrays + KDTree once ──
+        sub_arrays = {}
+        for s_subs in self.substrate_unique:
+            me = np.asarray(physicell.get_microenv(s_subs))
+            xn = (me[:, 0] - self.x_min) / x_range
+            yn = (me[:, 1] - self.y_min) / y_range
+            tree = cKDTree(np.column_stack((xn, yn)))
+            sub_arrays[s_subs] = (xn, yn, me[:, -1], tree)  # (x_norm, y_norm, conc, tree)
+
+        # ── Block 3: per-substrate, drug-relative features ────────
+        tumor_cx, tumor_cy = centroids.get("tumor", (0.5, 0.5))
+        tumor_sx, tumor_sy = spreads.get("tumor",   (0.1, 0.1))
+        tumor_spread = max(np.sqrt(tumor_sx**2 + tumor_sy**2), 1e-3)
+
+        block3 = []
+        for s_subs in self.substrate_unique:
+            xn, yn, conc, tree = sub_arrays[s_subs]
+
+            # concentration at tumor cell positions (nearest voxel via KDTree)
+            df_tumor = self.df_alive[self.df_alive["type"] == "tumor"] if "tumor" in self.cell_type_to_id else pd.DataFrame()
+            if len(df_tumor) == 0:
+                conc_at_tumor = 0.0
+            else:
+                txn = (df_tumor["x"].to_numpy() - self.x_min) / x_range
+                tyn = (df_tumor["y"].to_numpy() - self.y_min) / y_range
+                _, nearest = tree.query(np.column_stack((txn, tyn)))
+                conc_at_tumor = float(conc[nearest].mean())
+
+            # gradient direction: weighted centroid of top-25% concentration voxels
+            thresh = np.percentile(conc, 75) if conc.max() > 1e-8 else 1.0
+            hot = conc >= thresh
+            if hot.sum() > 0 and conc.max() > 1e-8:
+                gc_x = float(np.average(xn[hot], weights=conc[hot]))
+                gc_y = float(np.average(yn[hot], weights=conc[hot]))
+                gdx  = gc_x - tumor_cx
+                gdy  = gc_y - tumor_cy
+                gang = np.arctan2(gdy, gdx)
+                grad_sin = float(np.sin(gang))
+                grad_cos = float(np.cos(gang))
+            else:
+                grad_sin, grad_cos = 0.0, 0.0
+
+            # mean concentration within 1-std radius of tumor centroid
+            dist_to_tumor = np.sqrt((xn - tumor_cx)**2 + (yn - tumor_cy)**2)
+            in_spread = dist_to_tumor <= tumor_spread
+            mean_in_spread = float(conc[in_spread].mean()) if in_spread.any() else 0.0
+
+            block3.extend([
+                np.clip(conc_at_tumor, 0.0, 1.0),
+                grad_sin,
+                grad_cos,
+                np.clip(mean_in_spread, 0.0, 1.0),
+            ])
+
+        # ── Block 4: mean substrate at each cell type's positions ──
+        block4 = []
+        for s_cell in type_names:
+            df_t = self.df_alive[self.df_alive["type"] == s_cell]
+            for s_subs in self.substrate_unique:
+                xn, yn, conc, tree = sub_arrays[s_subs]
+                if len(df_t) == 0 or conc.max() < 1e-8:
+                    block4.append(0.0)
+                    continue
+                cxn = (df_t["x"].to_numpy() - self.x_min) / x_range
+                cyn = (df_t["y"].to_numpy() - self.y_min) / y_range
+                _, nearest = tree.query(np.column_stack((cxn, cyn)))
+                block4.append(float(np.clip(conc[nearest].mean(), 0.0, 1.0)))
+
+        return np.array(block1 + block2 + block3 + block4, dtype=np.float32)
+
+    def get_cross_nn_features(self):
+        """
+        For every ordered pair (A, B) of cell types, compute the mean and std
+        of the distance from each A-cell to its nearest B-cell neighbour.
+
+        This is the vector equivalent of what a CNN learns implicitly from
+        multi-channel images: how close are populations, and how variable is
+        that proximity (uniform infiltration vs. sparse contact)?
+
+        Shape: n_types * (n_types - 1) * 2
+          — 2 values (mean_nn_dist, std_nn_dist) per ordered pair
+          — all distances normalised by domain diagonal → [0, 1]
+          — absent-type slots stay 0.0
+        """
+        x_range  = self.x_max - self.x_min + 1e-8
+        y_range  = self.y_max - self.y_min + 1e-8
+        diagonal = np.sqrt(x_range**2 + y_range**2) + 1e-8
+
+        type_names = list(self.cell_type_to_id.keys())
+        n_types    = len(type_names)
+
+        # Pre-build normalised coords + KDTree per type
+        coords = {}
+        trees  = {}
+        for s in type_names:
+            df_t = self.df_alive[self.df_alive["type"] == s]
+            if len(df_t) == 0:
+                coords[s] = None
+                trees[s]  = None
+            else:
+                xn = (df_t["x"].to_numpy() - self.x_min) / x_range
+                yn = (df_t["y"].to_numpy() - self.y_min) / y_range
+                coords[s] = np.column_stack((xn, yn))
+                trees[s]  = cKDTree(coords[s])
+
+        features = []
+        for sa in type_names:
+            for sb in type_names:
+                if sa == sb:
+                    continue
+                if coords[sa] is None or trees[sb] is None:
+                    features.extend([0.0, 0.0])
+                    continue
+                # distance from each A-cell to nearest B-cell, in diagonal units
+                dists, _ = trees[sb].query(coords[sa], k=1)
+                dists_norm = dists / diagonal
+                features.append(float(dists_norm.mean()))
+                features.append(float(dists_norm.std()) if len(dists_norm) > 1 else 0.0)
+
+        return np.array(features, dtype=np.float32)
+
+    def get_occupancy_grid(self):
+        """
+        Encodes both cell positions and substrate concentrations into a flat
+        grid_n x grid_n occupancy map per channel.
+
+        Cell channels  : fraction of total alive population in each bin.
+                         (normalised by total so values are in [0, 1])
+        Substrate channels: mean concentration in each bin, clipped to [0, 1].
+
+        Shape: (cell_type_count + substrate_count) * grid_n * grid_n
+        Co-localisation is implicit: if tumour cells and T-cells share a bin,
+        both channels are non-zero at the same index — the MLP sees this.
+        """
+        n = self.grid_n
+        n_types = self.cell_type_count
+        n_subs  = self.substrate_count
+        total_cells = max(len(self.df_alive), 1)
+
+        cell_grid = np.zeros((n_types, n, n), dtype=np.float32)
+        for s_cell_type, i_id in self.cell_type_to_id.items():
+            df_type = self.df_alive[self.df_alive["type"] == s_cell_type]
+            if len(df_type) == 0:
+                continue
+            xi = ((df_type["x"].to_numpy() - self.x_min) / self.width  * n).astype(int).clip(0, n - 1)
+            yi = ((df_type["y"].to_numpy() - self.y_min) / self.height * n).astype(int).clip(0, n - 1)
+            np.add.at(cell_grid[i_id], (xi, yi), 1.0)
+        cell_grid /= total_cells  # normalise → each value in [0, 1]
+
+        subs_grid = np.zeros((n_subs, n, n), dtype=np.float32)
+        counts    = np.zeros((n, n), dtype=np.float32)
+        for i, s_subs in enumerate(self.substrate_unique):
+            microenv = np.asarray(physicell.get_microenv(s_subs))
+            x    = microenv[:, 0]
+            y    = microenv[:, 1]
+            conc = microenv[:, -1]
+            xi = ((x - self.x_min) / self.width  * n).astype(int).clip(0, n - 1)
+            yi = ((y - self.y_min) / self.height * n).astype(int).clip(0, n - 1)
+            counts[:] = 0.0
+            np.add.at(subs_grid[i], (xi, yi), conc)
+            np.add.at(counts,       (xi, yi), 1.0)
+            mask = counts > 0
+            subs_grid[i][mask] /= counts[mask]  # mean concentration per bin
+        subs_grid = np.clip(subs_grid, 0.0, 1.0)
+
+        return np.concatenate([cell_grid.ravel(), subs_grid.ravel()])
+
+    def get_observation(self):
+        """expit
+        input:
+
+        output:
+            o_observation: object compatible with the defined
+                observation space struct.
+
+        run:
+            internal function, user defined.
+
+        description:
+            data for the observation object for example be retrieved by:
+            + physicell.get_parameter("my_parameter")
+            + physicell.get_variable("my_variable")
+            + physicell.get_vector("my_vector")
+            however, there are no limits.
+        """
+        # model dependent observation processing logic goes here!
+
+        # get cell data frame
+        self.df_cell = pd.DataFrame(
+            physicell.get_cell(), columns=["ID", "x", "y", "z", "dead", "type"]
+        )
+        self.df_dead = self.df_cell[self.df_cell["dead"] >= 0.1]
+        self.df_alive = self.df_cell[self.df_cell["dead"] < 0.1]
+
+        # update tumor cell count
+        self.c_prev = self.c_t
+        self.c_t = self.df_alive.loc[(self.df_alive.type == "tumor"), :].shape[0]
+        if self.c_prev is None:
+            self.c_prev = self.c_t
+            self.c_0 = self.c_t
+        self.nb_tumor = self.c_t
+
+        # observe the environemnt
+        if self.observation_mode == "scalars_cells":
+            o_observation = self.get_cells_scalars()
+        elif self.observation_mode == "scalars_substrates":
+            o_observation = self.get_substrates_scalars()
+        elif self.observation_mode == "scalars_cells_substrates":
+            o_observation = np.concatenate(
+                [self.get_cells_scalars(), self.get_substrates_scalars()]
+            )
+        elif self.observation_mode == "scalars_macrophages":
+            o_observation = self.get_macrophage_polarization_scalars()
+        elif (
+            self.observation_mode
+            == f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+        ):
+            o_observation =self.get_matrix_cells()
+        elif (
+            self.observation_mode
+            == f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+        ):
+            o_observation = self.get_matrix_substrates()
+        elif (
+            self.observation_mode
+            == f"img_mc_cells_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+        ):
+            o_observation = np.concatenate(
+                [
+                    self.get_matrix_cells(),
+                    self.get_matrix_substrates(),
+                ]
+            )
+        elif self.observation_mode == "spatial_scalars_cells":
+            o_observation = np.concatenate([
+                self.get_cells_scalars(),
+                self.get_spatial_features(),
+            ])
+
+        elif self.observation_mode == "spatial_scalars_cells_substrates":
+            o_observation = np.concatenate([
+                self.get_cells_scalars(),
+                self.get_substrates_scalars(),
+                self.get_spatial_features(),
+            ])
+        
+        elif self.observation_mode == "spatial_scalars_cells_spatial_substrates":
+            o_observation = np.concatenate([
+                self.get_cells_scalars(),
+                self.get_substrates_scalars(),
+                self.get_spatial_features(),
+                self.get_spatial_substrate_features(),
+            ])
+        elif self.observation_mode == "spatial_scalars_cells_spatial_no_scalars_substrates":
+            o_observation = np.concatenate([
+                self.get_cells_scalars(),
+                self.get_spatial_features(),
+                self.get_spatial_substrate_features(),
+            ])
+        
+        elif self.observation_mode == f"kmeans_spatial_scalars_cells_substrates":
+            o_observation = np.concatenate([
+                self.get_spatial_features(),
+                self.get_spatial_substrate_features(),
+            ])
+
+        elif self.observation_mode == "occupancy_grid":
+            o_observation = self.get_occupancy_grid()
+
+        elif self.observation_mode == "relational":
+            o_observation = self.get_relational_features()
+
+        elif self.observation_mode == "cross_nn_relational":
+            o_observation = np.concatenate([
+                self.get_relational_features(),
+                self.get_cross_nn_features(),
+            ])
+
+        else:
+            raise ValueError(
+                f"unknown observation type: {self.kwargs['observation_mode']}"
+            )
+
+        # output
+        return o_observation
+
+    def get_info(self):
+        """
+        input:
+
+        output:
+            info: dictionary
+
+        run:
+            internal function, user defined.
+
+        description:
+            function to provide additional information important for
+            controlling the action of the policy. for example,
+            if we do reinforcement learning on a jump and run game,
+            the number of hearts (lives left) from our character.
+        """
+        # model dependent info processing logic goes here!
+        info = {
+            "df_cell": self.df_cell,
+            "number_tumor": self.nb_tumor,
+        }
+
+        # output
+        return info
+
+    def get_terminated(self):
+        """
+        input:
+
+        output:
+            b_terminated: bool
+
+        run:
+            internal function, user defined.
+
+        description:
+            function to determine if the episode is terminated.
+            for example, if we do reinforcement learning on a
+            jump and run game, if our character died.
+            please notice, that this ending is different form
+            truncated (the episode reached the max time limit).
+        """
+        # model dependent terminated processing logic goes here!
+        return True if self.c_t <= 3 or self.c_t>256 else False
+
+    def get_reset_values(self):
         """
         input:
 
         output:
 
         run:
-            import gymnasium
-            import physigym
-
-            env = gymnasium.make("physigym/ModelPhysiCellEnv")
-
-            env.unwrapped.verbose_true()
+            internal function, user defined.
 
         description:
-            to set verbosity true after initialization.
-
-            please note, only little from the standard output is coming
-            actually from physigym. most of the output comes straight
-            from PhysiCell and this setting has no influence over that output.
+            function to reset model specific self.variables. e.g.:
+            self.my_variable = None
         """
-        print(f"physigym: set env.verbose = True.")
-        self.verbose = True
+        self.c_t = None
+        self.c_prev = None
+        self.c_0 = None
 
-    def verbose_false(self):
+    def get_reward(self):
         """
         input:
 
         output:
+            r_reward: float between or equal to 0.0 and 1.0.
+                there are no other limits to the algorithm implementation enforced.
+                however, the algorithm is usually based on data retrieved
+                by the get_observation function (o_observation, info),
+                and possibly by the render function (a_img).
 
         run:
-            import gymnasium
-            import physigym
-
-            env = gymnasium.make("physigym/ModelPhysiCellEnv")
-
-            env.unwrapped.verbose_true()
+            internal function, user defined.
 
         description:
-            to set verbosity false after initialization.
-
-            please note, only little from the standard output is coming
-            actually from physigym. most of the output comes straight
-            from PhysiCell and this setting has no influence over that output.
+            cost function.
         """
-        print(f"physigym: set env.verbose = False.")
-        self.verbose = False
+
+        expected_growth = self.c_prev * (np.exp(self.lambda_dt) - 1.0)
+        expected_growth = max(expected_growth, 1e-8)
+        r_tumor = (self.c_prev - self.c_t) / expected_growth
+        return r_tumor
+
+    def get_img(self):
+        """
+        input:
+
+        output:
+            self.fig.savefig
+                instance attached matplotlib figure.
+
+        run:
+            internal function, user defined.
+
+        description:
+            template code to generate a matplotlib figure from the data.
+            for example from:
+            + physicell.get_microenv("my_substrate")
+            + physicell.get_cell()
+            + physicell.get_variable("my_variable")
+            however, there are no limits.
+        """
+        # model dependent img processing logic goes here!
+        self.fig.clf()
+        ax = self.fig.add_subplot(1, 1, 1)
+        ax.axis("equal")
+        ax.axis("off")
+
+        ##################
+        # substrate data #
+        ##################
+
+        # debris
+        df_conc = pd.DataFrame(
+            physicell.get_microenv("debris"), columns=["x", "y", "z", "debris"]
+        )
+        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_mesh = df_conc.pivot(index="y", columns="x", values="debris")
+        ax.contourf(
+            df_mesh.columns,
+            df_mesh.index,
+            df_mesh.values,
+            vmin=0.0,
+            vmax=1.0,
+            cmap="Reds",
+            alpha=1 / 3,
+        )
+
+        # pro-tumoral factor
+        df_conc = pd.DataFrame(
+            physicell.get_microenv("pro-tumoral factor"),
+            columns=["x", "y", "z", "pro-tumoral factor"],
+        )
+        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_mesh = df_conc.pivot(index="y", columns="x", values="pro-tumoral factor")
+        ax.contourf(
+            df_mesh.columns,
+            df_mesh.index,
+            df_mesh.values,
+            vmin=0.0,
+            vmax=1.0,
+            cmap="Blues",
+            alpha=1 / 3,
+        )
+
+        # anti-tumoral factor
+        df_conc = pd.DataFrame(
+            physicell.get_microenv("anti-tumoral factor"),
+            columns=["x", "y", "z", "anti-tumoral factor"],
+        )
+        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_mesh = df_conc.pivot(index="y", columns="x", values="anti-tumoral factor")
+        ax.contourf(
+            df_mesh.columns,
+            df_mesh.index,
+            df_mesh.values,
+            vmin=0.0,
+            vmax=1.0,
+            cmap="Greens",
+            alpha=1 / 3,
+        )
+
+        ######################
+        # substrate colorbar #
+        ######################
+
+        # self.fig.colorbar(
+        #    mappable=cm.ScalarMappable(norm=colors.Normalize(vmin=0.0, vmax=1.0), cmap="Reds"),
+        #    label="my_substrate",
+        #    ax=ax,
+        # )
+
+        #############
+        # cell data #
+        #############
+
+        df_cell = pd.DataFrame(
+            physicell.get_cell(), columns=["ID", "x", "y", "z", "dead", "cell_type"]
+        )
+        df_cell = df_cell.loc[(df_cell.dead < 0.1), :]
+        df_cell["color"] = None
+        for s_cell_type, s_color in self.cell_type_to_color.items():
+            df_cell.loc[(df_cell.cell_type == s_cell_type), "color"] = s_color
+        # df_variable = pd.DataFrame(physicell.get_variable("my_variable"), columns=["my_variable"])
+        # df_cell = pd.merge(df_cell, df_variable, left_index=True, right_index=True, how="left")
+        df_cell = df_cell.loc[df_cell.z == 0.0, :]
+        df_cell.plot(
+            kind="scatter",
+            x="x",
+            y="y",
+            c="color",
+            xlim=[self.x_min, self.x_max],
+            ylim=[self.y_min, self.y_max],
+            #    vmin=0.0, vmax=1.0, cmap="viridis",
+            #    grid=True,
+            #    title=f"dt_self.kwargs['img_mc_grid_size_y']m env step {str(self.step_env).zfill(4)} episode {str(self.episode).zfill(3)} episode step {str(self.step_episode).zfill(3)} : {df_cell.shape[0]} [cell]",
+            ax=ax,
+        )
+
+        ################
+        # save to file #
+        ################
+
+        plt.tight_layout()
+        s_path = self.x_root.xpath("//save/folder")[0].text + "/render_mode_human/"
+        os.makedirs(s_path, exist_ok=True)
+        self.fig.savefig(
+            f"{s_path}timeseries_step{str(self.step_env).zfill(3)}.jpeg",
+            facecolor="white",
+        )
+
+    def save_fig(self, action_value: float):
+        """
+        Fast rendering of cells + action bar using OpenCV (no matplotlib).
+        Saves a JPEG frame ready for video creation.
+        """
+
+        # Canvas settings
+        canvas_width, canvas_height = 800, 800
+        canvas = (
+            np.ones((canvas_height, canvas_width, 3), dtype=np.uint8) * 255
+        )  # white background
+
+        # Scale cell coordinates to canvas
+        df_cell = self.df_alive.copy()
+        df_cell = df_cell[df_cell.z == 0.0]  # only z=0
+
+        x_scaled = (
+            (df_cell["x"] - self.x_min)
+            / (self.width)
+            * (canvas_width - 100)
+        ).astype(int)
+        y_scaled = (
+            (df_cell["y"] - self.y_min)
+            / (self.height)
+            * (canvas_height - 20)
+        ).astype(int)
+
+        # Draw cells
+        for x, y, cell_type in zip(x_scaled, y_scaled, df_cell["type"]):
+            color = self.cell_type_to_color[cell_type]
+            # Convert RGB [0,1] to BGR [0,255] for OpenCV
+            if isinstance(color, (tuple, list)):
+                bgr = tuple(int(255 * val) for val in reversed(color))
+            else:
+                bgr = (0, 0, 255)  # default red
+            cv2.circle(
+                canvas, (x, canvas_height - 1 - y), 3, bgr, -1
+            )  # invert y for OpenCV coords
+
+        # Draw action bar
+        action_space = self.get_action_space()["drug_1"]
+        action_min, action_max = float(action_space.low[0]), float(action_space.high[0])
+        action_scaled = int(
+            ((action_value - action_min) / (action_max - action_min)) * canvas_height
+        )
+        action_scaled = np.clip(action_scaled, 0, canvas_height)
+
+        bar_x_start = canvas_width - 50
+        bar_width = 20
+        cv2.rectangle(
+            canvas,
+            (bar_x_start, canvas_height - action_scaled),
+            (bar_x_start + bar_width, canvas_height),
+            (0, 0, 255),
+            -1,
+        )
+
+        # Optional: write action value text
+        font_scale = 0.5
+        cv2.putText(
+            canvas,
+            f"{action_value:.2f}",
+            (bar_x_start + bar_width + 5, canvas_height - action_scaled // 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (0, 0, 0),
+            1,
+            cv2.LINE_AA,
+        )
+
+        # Save JPEG frame
+        s_path = os.path.join(
+            self.x_root.xpath("//save/folder")[0].text, "render_mode_human"
+        )
+        os.makedirs(s_path, exist_ok=True)
+        filename = f"{s_path}/timeseries_step{str(self.step_env).zfill(3)}.jpeg"
+        cv2.imwrite(filename, canvas)
