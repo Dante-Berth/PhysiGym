@@ -328,8 +328,8 @@ def generate_initial_condition(
     # =========================================================================
     # NEW LOGIC: Round to nearest whole number, cast to integer, drop overlaps
     # =========================================================================
-    df["x"] = df["x"].round().astype(int)
-    df["y"] = df["y"].round().astype(int)
+    df["x"] = df["x"].round().astype(int).clip(x_min, x_max)
+    df["y"] = df["y"].round().astype(int).clip(y_min, y_max)
 
     # Changed keep=False to keep='first' so that one cell remains if multiples
     # land on the exact same (x, y) grid spot.
