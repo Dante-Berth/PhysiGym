@@ -221,3 +221,31 @@ int add_substrate(std::string s_substrate, double r_dose) {
     }
     return 0;
 }
+double add_local_substrate(std::string s_substrate, double center_x, double center_y, double radius, double r_dose) {
+    int k = microenvironment.find_density_index(s_substrate);
+    double total_drug_added = 0.0;
+    double radius_sq = radius * radius;
+    
+    // Safety check: if dose or radius is 0, do nothing
+    if (r_dose <= 0.0 || radius <= 0.0) {
+        return 0.0;
+    }
+
+    for (unsigned int n=0; n < microenvironment.number_of_voxels(); n++) {
+        // Get the geometric center of the current voxel
+        std::vector<double> voxel_center = microenvironment.mesh.voxels[n].center;
+        
+        double dx = voxel_center[0] - center_x;
+        double dy = voxel_center[1] - center_y;
+        
+        // If the voxel is within our sniper radius (2D cylinder logic)
+        if ( (dx*dx + dy*dy) <= radius_sq ) {
+            microenvironment(n)[k] += r_dose;
+            
+            // PhysiCell densities are amount/volume. 
+            // Total amount added = density_change * voxel_volume
+            total_drug_added += (r_dose * microenvironment.mesh.voxels[n].volume);
+        }
+    }
+    return total_drug_added;
+}

@@ -151,7 +151,8 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
         XML_status = read_PhysiCell_config_file(settingxml);
         if (XML_status) { PhysiCell_settings.read_from_pugixml(); }
         if (!XML_status) { exit(-1); }
-        
+        //PhysiCell_settings.max_time = 1440 + (std::rand() % (10080 - 1440 + 1));
+        //PhysiCell_settings.max_time = 1440;
         create_output_directory(PhysiCell_settings.folder);
 
         // OpenMP setup
@@ -160,7 +161,6 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
         // reset cells
         std::cout << "reset cells ..." << std::endl;
         destroy_all_cells();
-        
         std::cout << "reset_max_basic_agent_ID ..." << std::endl;
         BioFVM::reset_max_basic_agent_ID();
 
@@ -168,18 +168,20 @@ static PyObject* physicell_start(PyObject *self, PyObject *args) {
         std::cout << "reset mesh0 ..." << std::endl;
         BioFVM::reset_BioFVM_substrates_initialized_in_dom();
 
-        // reset microenvironment
+        // reset microenvironment and mechanics voxel size and match the data structure to BioFVM
         std::cout << "reset densities ..." << std::endl;
         set_microenvironment_initial_condition();
         microenvironment.display_information(std::cout);
-
-        // ✅ REMOVED the create_cell_container_for_microenvironment lines!
-        // The old container is still there and perfectly empty.
+        double mechanics_voxel_size = 30;
+        Cell_Container* cell_container = create_cell_container_for_microenvironment(microenvironment, mechanics_voxel_size);
 
         // reset tissue
         std::cout << "reset tissue ..." << std::endl;
         display_cell_definitions(std::cout);
-        setup_tissue();  
+        setup_tissue();  // modify this in the custom code
+
+        // MultiCellDS save options
+        // have only to be set once per runtime
     }
 
     // copy config file to output directory
@@ -288,42 +290,22 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
             }
 
             // do action
+            // do action
             if (action) {
 
-                // achtung : begin physigym specific implementation!
-                // std::cout << "administer drug ... " << std::endl;
-                add_substrate("drug_1", parameters.doubles("drug_1"));
+                // Read the 4 continuous values that Python/Gym just set
+                double target_x = parameters.doubles("drug_1_x");
+                double target_y = parameters.doubles("drug_1_y");
+                double target_r = parameters.doubles("drug_1_radius");
+                double target_dose = parameters.doubles("drug_1_dose");
+                
+                // Execute the sniper shot and capture the total mass
+                double amount_used = add_local_substrate("drug_1", target_x, target_y, target_r, target_dose);
+
+                // Save the amount used to a custom parameter so Python can pull it as a penalty!
+                parameters.doubles("drug_1_amount_used") = amount_used;
+
                 action = false;
-                // achtung : end physigym specific implementation!
-
-                // Put physigym related parameter, variable, and vector action mapping here!
-
-                // parameter
-                //my_function( parameters.bools("my_bool")) );
-                //my_function( parameters.ints("my_int")) );
-                //my_function( parameters.doubles("my_float") );
-                //my_function( parameters.strings("my_str") );
-
-                // custom variable
-                //std::string my_variable = "my_variable";
-                //for (Cell* pCell : (*all_cells)) {
-                //    my_function( pCell->custom_data[my_variable] );
-                //}
-
-                // custom vector
-                //std::string my_vector = "my_vector";
-                //for (Cell* pCell : (*all_cells)) {
-                //    int vectindex = pCell->custom_data.find_vector_variable_index(my_vector);
-                //    if (vectindex > -1) {
-                //        my_function( pCell->custom_data.vector_variables[vectindex].value );
-                //    } else {
-                //        char error[1024];
-                //        snprintf(error, sizeof(error), "Error: unknown custom_data vector! %s", my_vector);
-                //        PyErr_SetString(PyExc_KeyError, error);
-                //        return NULL;
-                //    }
-                //}
-
             }
 
             // do observation

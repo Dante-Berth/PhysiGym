@@ -89,5 +89,5 @@ void phenotype_function( Cell* pCell, Phenotype& phenotype, double dt );
 void custom_function( Cell* pCell, Phenotype& phenotype , double dt );
 
 void contact_function( Cell* pMe, Phenotype& phenoMe , Cell* pOther, Phenotype& phenoOther , double dt );
-int add_substrate(std::string s_substrate, double r_dose); 
-
+int add_substrate(std::string s_substrate, double r_dose);
+double add_local_substrate(std::string s_substrate, double center_x, double center_y, double radius, double r_dose); 
