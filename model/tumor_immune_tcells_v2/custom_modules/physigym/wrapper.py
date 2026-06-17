@@ -318,6 +318,8 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.list_data            = []
         self._frame_buffer        = []   # list of dicts: {cells, subs, action, reward, dose, n_tumor}
         self._action_history      = []   # list of np.ndarray, one per env step in current episode
+        self._decision_anchor     = None # clipped action at start of current decision block
+        self._last_raw_decision   = None # raw action of the current decision block
         # IC + mode of the episode CURRENTLY running, captured at generation time
         # so save_data() finalizes the finished episode with its own IC/mode,
         # not the next episode's (which generation overwrites before save runs).
@@ -490,8 +492,17 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
         obs, info = self.env.reset(seed=seed, options=options)
 
-        # fresh action history for the new episode
-        self._action_history = []
+        # fresh action history for the new episode; seed with the midpoint of
+        # the action space so the very first step is also delta-constrained
+        if self._action_delta_max is not None:
+            mid = ((self._action_space.low + self._action_space.high) / 2.0).astype(np.float32)
+            self._action_history    = [mid]
+            self._decision_anchor   = mid.copy()
+            self._last_raw_decision = mid.copy()
+        else:
+            self._action_history    = []
+            self._decision_anchor   = None
+            self._last_raw_decision = None
 
         info["train_test"]   = self.mode
         info["type_mode"]    = self.type_mode
@@ -500,13 +511,21 @@ class PhysiCellModelWrapper(gym.Wrapper):
         return obs, info
 
     def step(self, action: np.ndarray):
-        # hard delta-clip for spatial (and dose) components before anything else
-        # operates in the normalised [0,1] action space so delta_max is grid-relative
+        # hard delta-clip against the DECISION ANCHOR (first action of the current
+        # decision block, not the most recent sub-step).  This prevents ratcheting
+        # when the same raw action is repeated across multiple sub-steps.
         action = np.asarray(action, dtype=np.float32).copy()
         if self._action_delta_max is not None and self._action_history:
-            prev = self._action_history[-1]
-            action = np.clip(action, prev - self._action_delta_max, prev + self._action_delta_max)
-            # re-clamp to the original action space bounds
+            # Detect a new decision by comparing raw action to the raw action of the
+            # current block — not the clipped version, which always differs after clip.
+            is_new_decision = not np.allclose(action, self._last_raw_decision, atol=1e-5)
+            if is_new_decision:
+                # advance anchor to the last clipped action before this new decision
+                self._decision_anchor   = self._action_history[-1].copy()
+                self._last_raw_decision = action.copy()
+            action = np.clip(action,
+                             self._decision_anchor - self._action_delta_max,
+                             self._decision_anchor + self._action_delta_max)
             action = np.clip(action, self._action_space.low, self._action_space.high)
 
         d_action = {v: np.array([val]) for v, val in zip(self.list_variable_name, action)}

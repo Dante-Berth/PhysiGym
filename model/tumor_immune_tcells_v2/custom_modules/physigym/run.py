@@ -19,9 +19,9 @@ import wandb
 from tqdm import tqdm
 
 # Your project imports
-from vectorized_tip import vec_envs
-from nn_tip import Actor, QNetwork
-from rb_tip import ReplayBuffer
+from vectorized import vec_envs
+from networks import Actor, QNetwork
+from rb import ReplayBuffer
 
 import queue
 from torch.multiprocessing import Event, Queue
@@ -278,16 +278,29 @@ def run_random_policy(d_arg):
                     split    = info.get("train_test", "train")
                     typemode = info.get("type_mode",  "unknown")
                     ep_ret   = float(episode_returns[i])
+                    ep_len   = int(info.get("step_episode", 0))
+
+                    a_delta_mean = float(info.get("action_step_delta_mean", 0.0))
+                    a_delta_std  = float(info.get("action_step_delta_std",  0.0))
+                    a_autocorr   = float(info.get("action_autocorr_lag1",   0.0))
+
                     log_dict = {
-                        f"charts/{split}_return_raw":            ep_ret,
-                        f"charts/{split}_{typemode}_return_raw": ep_ret,
+                        f"charts/{split}_return_raw":                    ep_ret,
+                        f"charts/{split}_{typemode}_return_raw":         ep_ret,
+                        f"charts/{split}_episode_length":                ep_len,
+                        f"charts/{split}_action_delta_mean":             a_delta_mean,
+                        f"charts/{split}_action_delta_std":              a_delta_std,
+                        f"charts/{split}_action_autocorr_lag1":          a_autocorr,
+                        f"charts/{split}_{typemode}_action_delta_mean":  a_delta_mean,
+                        f"charts/{split}_{typemode}_action_autocorr":    a_autocorr,
                     }
                     if d_arg["simulation"]["wandb_track"]:
                         run.log(log_dict, step=local_step)
                     else:
                         for tag, val in log_dict.items():
                             writer.add_scalar(tag, val, local_step)
-                    print(f"[random] step={local_step}  ep_return={ep_ret:.3f}  mode={split}/{typemode}")
+                    print(f"[random] step={local_step}  ep_return={ep_ret:.3f}  "
+                          f"ep_len={ep_len}  autocorr={a_autocorr:.3f}  mode={split}/{typemode}")
                     episode_returns[i] = 0.0
 
             obs = next_obs
