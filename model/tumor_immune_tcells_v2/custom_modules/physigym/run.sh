@@ -22,7 +22,7 @@ python custom_modules/physigym/run.py \
   --action_repeat  4               \
   --delta_x        0.15            \
   --delta_y        0.15            \
-  --delta_radius   0.20            \
+  --delta_radius   0.05            \
   --total_timesteps 500000         \
   --wandb          true            \
   --name           "RANDOM_baseline_seed${SEEDS[0]}"
@@ -42,7 +42,7 @@ for seed in "${SEEDS[@]}"; do
       --action_repeat  4          \
       --delta_x        0.15       \
       --delta_y        0.15       \
-      --delta_radius   0.20       \
+      --delta_radius   0.05       \
       --total_timesteps 500000    \
       --wandb          true       \
       --name           "SAC_${obs}_seed${seed}"

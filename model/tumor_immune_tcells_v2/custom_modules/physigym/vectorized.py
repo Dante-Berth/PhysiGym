@@ -302,7 +302,7 @@ if __name__ == "__main__":
     ACTION_REPEAT  = 4       # same action held for N steps
     DELTA_X        = 0.15    # max x displacement per decision step
     DELTA_Y        = 0.15    # max y displacement per decision step
-    DELTA_RADIUS   = 0.20    # max radius change per decision step
+    DELTA_RADIUS   = 0.05    # max radius change per decision step
     DELTA_DOSE     = 1.0     # unconstrained
     W_SMOOTH       = 0.02    # smoothness penalty weight
 

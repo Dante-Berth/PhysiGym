@@ -544,7 +544,9 @@ class PhysiCellModelWrapper(gym.Wrapper):
         else:
             d_action["drug_1_x"]      = self.env.unwrapped.x_min + d_action["drug_1_x"]      * self.env.unwrapped.width
             d_action["drug_1_y"]      = self.env.unwrapped.y_min + d_action["drug_1_y"]      * self.env.unwrapped.height
-            d_action["drug_1_radius"] = d_action["drug_1_radius"] * max_radius
+            radius_min_norm = 0.05   # floor: ~5% of max_radius
+            radius_max_norm = 0.20   # ceiling: ~20% of max_radius (precise drops)
+            d_action["drug_1_radius"] = (radius_min_norm + d_action["drug_1_radius"] * (radius_max_norm - radius_min_norm)) * max_radius
 
         obs, r_cancer_cells, terminated, truncated, info = self.env.step(d_action)
         dose_spent = self.env.unwrapped.get_wrapper_attr("get_dose_spent")()
