@@ -185,8 +185,7 @@ def actor_process(
                 train_test = info.get("train_test", "train")
                 step_ep    = info.get("step_episode", 0)
                 type_mode  = info.get("type_mode", "unknown")
-                try:
-                    stats_queue.put_nowait({
+                stat_entry = {
                         "episode_return":         float(episode_returns[i]),
                         "episode_length":         int(step_ep),
                         "step":                   int(local_step),
@@ -197,7 +196,12 @@ def actor_process(
                         "action_step_delta_mean": float(info.get("action_step_delta_mean", 0.0)),
                         "action_step_delta_std":  float(info.get("action_step_delta_std",  0.0)),
                         "action_autocorr_lag1":   float(info.get("action_autocorr_lag1",   0.0)),
-                    })
+                }
+                # forward Q-calibration data from test episodes to the learner
+                if train_test == "test" and "q_calibration_data" in info:
+                    stat_entry["q_calibration_data"] = info["q_calibration_data"]
+                try:
+                    stats_queue.put_nowait(stat_entry)
                 except queue.Full:
                     pass
                 episode_returns[i] = 0.0
@@ -577,6 +581,44 @@ def run_async_sac(d_arg):
                 if len(buf) >= len(buf)//2:
                     log_dict[f"charts/{split}_return_mean50"] = np.mean(buf)
                     log_dict[f"charts/{split}_return_std"]    = np.std(buf)
+
+                # ── Q-value calibration (test episodes only) ─────────
+                q_calib = stat.get("q_calibration_data", None)
+                if q_calib is not None and split == "test":
+                    gamma = d_arg["rl"]["gamma"]
+                    rewards_ep = np.array([s["reward"] for s in q_calib], dtype=np.float32)
+                    T = len(rewards_ep)
+                    mc_returns = np.zeros(T, dtype=np.float32)
+                    running = 0.0
+                    for t in reversed(range(T)):
+                        running = rewards_ep[t] + gamma * running
+                        mc_returns[t] = running
+
+                    is_graph = d_arg_env["is_graph"]
+                    q_errors = []
+                    qf1.eval()
+                    qf2.eval()
+                    with torch.no_grad():
+                        for t, step_data in enumerate(q_calib):
+                            obs_t = step_data["obs"]
+                            act_t = step_data["action"]
+                            if is_graph:
+                                obs_t = {k: np.expand_dims(v, 0) for k, v in obs_t.items()}
+                                s = obs_to_pyg(obs_t, device)
+                            else:
+                                s = torch.tensor(obs_t, dtype=torch.float32, device=device).unsqueeze(0)
+                            a = torch.tensor(act_t, dtype=torch.float32, device=device).unsqueeze(0)
+                            q_pred = torch.min(qf1(s, a), qf2(s, a)).item()
+                            q_errors.append(q_pred - float(mc_returns[t]))
+                    qf1.train()
+                    qf2.train()
+
+                    q_errors = np.array(q_errors)
+                    log_dict["charts/test_q_bias"]  = float(np.mean(q_errors))
+                    log_dict["charts/test_q_mae"]   = float(np.mean(np.abs(q_errors)))
+                    log_dict["charts/test_q_corr"]  = float(np.corrcoef(
+                        mc_returns, mc_returns + q_errors
+                    )[0, 1]) if T > 1 else 0.0
 
                 if d_arg["simulation"]["wandb_track"]:
                     run.log(log_dict, step=drained)

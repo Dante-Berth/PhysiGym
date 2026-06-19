@@ -320,6 +320,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self._action_history      = []   # list of np.ndarray, one per env step in current episode
         self._decision_anchor     = None # clipped action at start of current decision block
         self._last_raw_decision   = None # raw action of the current decision block
+        self._q_calib_buffer      = []   # list of dicts: {obs, action, reward} for test episodes
         # IC + mode of the episode CURRENTLY running, captured at generation time
         # so save_data() finalizes the finished episode with its own IC/mode,
         # not the next episode's (which generation overwrites before save runs).
@@ -503,6 +504,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
             self._action_history    = []
             self._decision_anchor   = None
             self._last_raw_decision = None
+        self._q_calib_buffer = []
 
         info["train_test"]   = self.mode
         info["type_mode"]    = self.type_mode
@@ -591,11 +593,21 @@ class PhysiCellModelWrapper(gym.Wrapper):
         }
         self.list_data.append(row)
 
-        # on episode end, attach smoothness metrics to info so the trainer
-        # can stream them through the same stats pipeline as episode_return
+        # collect (obs, action, reward) for Q-value calibration on test episodes
+        if self.generate_physicell_data:
+            self._q_calib_buffer.append({
+                "obs":    obs,   # next_obs — what the critic sees as current state
+                "action": action_arr.copy(),
+                "reward": reward,
+            })
+
+        # on episode end, attach smoothness metrics and Q-calibration data to info
         if terminated or truncated:
             stats = self._compute_action_smoothness(self._action_history)
             info.update(stats)
+            if self.generate_physicell_data and self._q_calib_buffer:
+                info["q_calibration_data"] = self._q_calib_buffer.copy()
+            self._q_calib_buffer = []
 
         # capture spatial frame for test episodes only
         if self.generate_physicell_data:
