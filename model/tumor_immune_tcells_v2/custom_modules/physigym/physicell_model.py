@@ -294,6 +294,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
             f"img_mc_cells_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
             f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
+            f"img_mc_cells_m1m2_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
+            f"img_mc_cells_substrates_m1m2_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
         ]:
             if (
                 observation_mode
@@ -318,6 +320,34 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                     high=255,
                     shape=(
                         self.substrate_count,
+                        self.kwargs["img_mc_grid_size_x"],
+                        self.kwargs["img_mc_grid_size_y"],
+                    ),
+                    dtype=np.uint8,
+                )
+            elif (
+                observation_mode
+                == f"img_mc_cells_m1m2_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+            ):
+                o_observation_space = spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(
+                        self.cell_type_count + 2,
+                        self.kwargs["img_mc_grid_size_x"],
+                        self.kwargs["img_mc_grid_size_y"],
+                    ),
+                    dtype=np.uint8,
+                )
+            elif (
+                observation_mode
+                == f"img_mc_cells_substrates_m1m2_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+            ):
+                o_observation_space = spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(
+                        self.cell_type_count + self.substrate_count + 2,
                         self.kwargs["img_mc_grid_size_x"],
                         self.kwargs["img_mc_grid_size_y"],
                     ),
@@ -544,7 +574,75 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 image[i, x_bin, y_bin] = value
 
         return ski.util.img_as_ubyte(np.clip(image,0,1))
-    
+
+    def get_matrix_macrophage_polarization(self):
+        """
+        Generates M1/M2 macrophage polarization images.
+        Classifies macrophages as M1 or M2 based on local substrate concentrations
+        (pro-tumoral vs anti-tumoral factors) at each cell's position.
+
+        Returns a uint8 image array of shape (2, img_mc_grid_size_x, img_mc_grid_size_y):
+          - Channel 0: M1 macrophages (anti-tumoral dominant)
+          - Channel 1: M2 macrophages (pro-tumoral dominant)
+        """
+        # ── fetch substrate voxel positions and concentrations ─────
+        pro  = np.asarray(physicell.get_microenv("pro_tumoral_factor"))   # (N,4): x,y,z,conc
+        anti = np.asarray(physicell.get_microenv("anti_tumoral_factor"))  # (N,4)
+
+        voxel_xy  = pro[:, :2]                  # (N, 2)  x,y positions
+        pro_conc  = pro[:, -1]                  # (N,)
+        anti_conc = anti[:, -1]                 # (N,)
+
+        tree = cKDTree(voxel_xy)
+
+        # ── initialize image for M1 and M2 ────────────────────────
+        image = np.zeros(
+            (
+                2,  # M1 and M2 channels
+                self.kwargs["img_mc_grid_size_x"],
+                self.kwargs["img_mc_grid_size_y"],
+            ),
+            dtype=np.float32,
+        )
+
+        # ── classify and bin each macrophage ──────────────────────
+        df_mac = self.df_alive[self.df_alive["type"] == "macrophage"]
+
+        if len(df_mac) > 0:
+            mac_xy = df_mac[["x", "y"]].to_numpy()
+            _, nearest = tree.query(mac_xy)          # nearest voxel index per cell
+
+            # Determine M1 vs M2 for each macrophage
+            is_M2 = pro_conc[nearest] > anti_conc[nearest]
+            m1_mask = ~is_M2
+            m2_mask = is_M2
+
+            # Discretize macrophage positions to grid bins
+            x_bin = (
+                (df_mac["x"].to_numpy() - self.x_min)
+                / (self.width)
+                * (self.kwargs["img_mc_grid_size_x"] - 1)
+            ).astype(int)
+            y_bin = (
+                (df_mac["y"].to_numpy() - self.y_min)
+                / (self.height)
+                * (self.kwargs["img_mc_grid_size_y"] - 1)
+            ).astype(int)
+
+            # Clip to grid bounds
+            x_bin = np.clip(x_bin, 0, self.kwargs["img_mc_grid_size_x"] - 1)
+            y_bin = np.clip(y_bin, 0, self.kwargs["img_mc_grid_size_y"] - 1)
+
+            # Accumulate M1 and M2 counts in image channels
+            np.add.at(image, (np.zeros_like(x_bin), x_bin[m1_mask], y_bin[m1_mask]), 1)
+            np.add.at(image, (np.ones_like(x_bin), x_bin[m2_mask], y_bin[m2_mask]), 1)
+
+        # Normalize and scale to uint8
+        scaled_image = image / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y)
+        clipped_image = np.clip(scaled_image, 0.0, 1.0)
+
+        return ski.util.img_as_ubyte(clipped_image)
+
     def get_spatial_substrate_features(self):
         """
         Finds the top K hotspots for each substrate using concentration-weighted K-Means.
@@ -1003,6 +1101,27 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 [
                     self.get_matrix_cells(),
                     self.get_matrix_substrates(),
+                ]
+            )
+        elif (
+            self.observation_mode
+            == f"img_mc_cells_m1m2_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+        ):
+            o_observation = np.concatenate(
+                [
+                    self.get_matrix_cells(),
+                    self.get_matrix_macrophage_polarization(),
+                ]
+            )
+        elif (
+            self.observation_mode
+            == f"img_mc_cells_substrates_m1m2_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
+        ):
+            o_observation = np.concatenate(
+                [
+                    self.get_matrix_cells(),
+                    self.get_matrix_substrates(),
+                    self.get_matrix_macrophage_polarization(),
                 ]
             )
         elif self.observation_mode == "spatial_scalars_cells":
