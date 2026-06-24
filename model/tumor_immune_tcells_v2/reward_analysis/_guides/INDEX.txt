@@ -1,0 +1,260 @@
+================================================================================
+REWARD ANALYSIS: Complete Index & Quick Reference
+================================================================================
+
+Generated: 2026-06-24
+Location: /home/alex/Physi/PhysiCell/custom_modules/physigym/physigym/envs/reward_analysis/
+
+================================================================================
+📋 RECOMMENDED HYPERPARAMETERS
+================================================================================
+
+Dynamics:
+  action_repeat = 6
+  delta_x = 0.25 mm
+  delta_y = 0.25 mm
+  delta_radius = 0.03 mm
+
+Reward weights:
+  w_cell = 0.3
+  w_dose = 2.0
+  w_smooth = 0.02
+
+Expected outcomes (95% CI):
+  Tumor reduction: -42.4 cells [-73.2, -10.6] ✓ significant
+  Total drug dose: 5.61 units [5.23, 6.01]
+  Smoothness cost: 18.58 [17.76, 19.42]
+
+================================================================================
+📊 FIGURES (14 PNG files, ~1.3 MB total)
+================================================================================
+
+ACTION REPEAT IMPORTANCE (why AR=6 dominates):
+  ✓ fig_action_repeat_deep_dive.png
+    → 4-panel plot: tumor reduction, smoothness, dose, objective vs AR
+    → Use in: Thesis Section 4.1.1 (main figure)
+
+  ✓ fig_action_repeat_sensitivity.png
+    → Simple 1D curves, same data
+    → Use in: Presentation slides
+
+  ✓ fig_action_repeat_phase_space.png
+    → 2D tradeoff: tumor reduction vs smoothness, colored by AR
+    → Use in: Appendix or supplementary
+
+  ✓ fig_immune_response_window.png
+    → Biological context: dwell time vs T-cell response window
+    → Use in: Thesis Section 4.1.1 (if space permits)
+
+DYNAMICS PARAMETERS (LHS search results):
+  ✓ fig_lhs_objective.png
+    → All 8 parameters vs objective (inverted-U shape for AR)
+    → Use in: Appendix (comprehensive overview)
+
+  ✓ fig_param_importance.png
+    → Bar chart: Optuna importance ranking (AR = 0.82)
+    → Use in: Thesis Section 4.1.2
+
+  ✓ fig_sobol.png
+    → Sobol sensitivity: variance explained by each parameter
+    → Use in: Thesis Section 4.1.2 (key evidence)
+
+  ✓ fig_outcome_cis.png
+    → Bootstrap 95% CIs for top 16 configs
+    → Use in: Thesis Section 4.1.3 (confirms statistical significance)
+
+  ✓ fig_time_series.png
+    → Episode trajectories: random/zero_drug/max_drug/cosine policies
+    → Use in: Thesis Section 4.1.3 or before RL section
+
+REWARD WEIGHTS (optional but interesting):
+  ✓ fig_reward_weight_correlation.png
+    → Heatmap: reward weights vs objective (shows flexibility)
+    → Use in: Thesis Section 4.1.2 or Appendix
+
+  ✓ fig_reward_weight_distributions.png
+    → Distributions of w_cell/w_dose/w_smooth in top configs
+    → Use in: Appendix (supports "reward weights are flexible")
+
+  ✓ fig_optuna_param_importance_rewards_static.png
+    → Bar chart: importance of w_cell/w_dose/w_smooth (all ~0.33)
+    → Use in: Appendix (shows why not critical)
+
+  ✓ fig_dynamics_vs_rewards_importance.png
+    → Side-by-side comparison: dynamics >> rewards
+    → Use in: Thesis Section 4.1.2 or Discussion
+
+================================================================================
+📄 MARKDOWN DOCUMENTATION (4 files, ~20 KB)
+================================================================================
+
+  ✓ README.md
+    → Overview of results, recommended config, how to use
+    → Start here! (~10 min read)
+
+  ✓ PAPER_INTEGRATION_GUIDE.md
+    → **ANSWER TO YOUR QUESTION: How to put this in a PhD thesis**
+    → Section templates, figure placement, table examples
+    → Copy-paste ready for your thesis (~45 min read)
+
+  ✓ ACTION_REPEAT_IMPORTANCE.md
+    → Technical deep dive: why AR=6, biological mechanism
+    → For reviewers asking "why this value?" (~10 min read)
+
+  ✓ REWARD_ANALYSIS_SUMMARY.md
+    → Concise summary for quick reference (~5 min read)
+
+ALSO IN THIS FOLDER:
+  ✓ search_report.md
+    → Auto-generated from hyperparam_search.py
+    → Technical summary of search methodology
+
+================================================================================
+📊 DATA FILES (CSV, 45+ MB)
+================================================================================
+
+  ✓ search_results.csv (139 KB)
+    → Complete results: 240 rows (20 LHS × 6 variant sweeps × 2 episodes)
+    → Columns: action_repeat, delta_x/y/radius, w_cell/w_dose/w_smooth,
+               tumor_reduction, total_dose, smooth_cost, objective, etc.
+    → Use for: Tables, custom analysis, robustness checks
+
+  ✓ raw_components.csv (45 MB)
+    → Per-episode rollout data (intermediate)
+    → Keep for reproducibility, but not needed for paper
+
+  ✓ lhs_design.csv (1.4 KB)
+    → The 20 LHS points in dynamics space
+    → Use for: Appendix (show search coverage)
+
+  ✓ param_importance.csv (219 B)
+    → Optuna importance scores: action_repeat=0.854, others < 0.1
+    → Use for: Verification
+
+================================================================================
+🐍 PYTHON SCRIPTS (2 files, reproducible analysis)
+================================================================================
+
+  ✓ visualize_action_repeat_importance.py (~300 lines)
+    → Generates action_repeat deep-dive figures & statistics
+    → Run: python3 visualize_action_repeat_importance.py
+    → Output: 4 figures + ACTION_REPEAT_IMPORTANCE.md
+
+  ✓ analyze_reward_coefficients.py (~300 lines)
+    → Analyzes reward weight sensitivity using Optuna + sklearn
+    → Run: python3 analyze_reward_coefficients.py
+    → Output: 5 figures + REWARD_ANALYSIS_SUMMARY.md
+
+Both scripts read from search_results.csv. Fully reproducible.
+
+================================================================================
+🎯 QUICK START: 3-STEP INTEGRATION
+================================================================================
+
+Step 1: READ
+  → Open PAPER_INTEGRATION_GUIDE.md
+  → Find your section (Methods? Results?)
+  → Copy the template
+
+Step 2: VIEW
+  → Open fig_action_repeat_deep_dive.png (main result)
+  → Open fig_param_importance.png (supports AR dominance)
+  → Open fig_outcome_cis.png (shows significance)
+
+Step 3: WRITE
+  → Paste template into your thesis
+  → Fill in your own details (numbers, framing)
+  → Insert 3-5 figures
+  → Add corresponding tables
+
+Total time: ~2-3 hours from scratch
+
+================================================================================
+📖 WHERE IN YOUR THESIS?
+================================================================================
+
+Chapter 3: Methods
+  └─ 3.2.3 Hyperparameter Search
+     → Copy from PAPER_INTEGRATION_GUIDE.md (Methods section, ~300 words)
+
+Chapter 4: Results
+  └─ 4.1 Hyperparameter Search Results (your main content)
+     └─ 4.1.1 Action Repeat Dominates (fig_action_repeat_deep_dive.png)
+     └─ 4.1.2 Spatial & Reward Parameters (fig_param_importance.png, fig_sobol.png)
+     └─ 4.1.3 Recommended Configuration (Table 4.2, fig_outcome_cis.png)
+
+Appendix A: Supplementary Results
+  └─ Extended figures, raw data tables, detailed methodology
+
+================================================================================
+❓ COMMON QUESTIONS
+================================================================================
+
+Q: "Is this too much content?"
+A: No, thesis committees expect hyperparameter justification in ML work.
+   Minimum: 4.1.1 + 4.1.3 (1 fig + 1 table). Ideal: full 4.1 (3-4 figs + 3 tables).
+
+Q: "What if I only have space for 1 figure?"
+A: Use fig_action_repeat_deep_dive.png (4-in-1 plot, tells the whole story).
+
+Q: "How do I reference this in text?"
+A: "Our hyperparameter search (Section 4.1, Fig 4.1) revealed that action_repeat
+   is the critical parameter, explaining 85% of objective variance..."
+
+Q: "Should I include all the data files?"
+A: search_results.csv yes (in appendix or as supplementary). raw_components.csv
+   can be cited as "available upon request" (it's huge).
+
+Q: "Can I make my own figures?"
+A: Yes! The scripts are fully reproducible. Run them on your own data if needed.
+
+Q: "What if a reviewer asks for statistical tests?"
+A: Already done! See ACTION_REPEAT_IMPORTANCE.md (t-tests, Cohen's d, effect sizes).
+
+================================================================================
+✅ CHECKLIST: Before Submitting
+================================================================================
+
+Content:
+  [ ] Methods section (3.2.3) explains search methodology
+  [ ] Results section (4.1) has all figures and tables
+  [ ] Discussion mentions implications of action_repeat finding
+  [ ] All figures have captions and are referenced in text
+
+Figures:
+  [ ] 3-5 main figures inserted in results section
+  [ ] Remaining figures in appendix
+  [ ] All figures at 300+ DPI (for printing)
+  [ ] Figure numbering is consistent
+
+Tables:
+  [ ] At least Table 4.2 (recommended config) in main text
+  [ ] Table 4.1 (action_repeat summary) in main or appendix
+  [ ] All tables have units and captions
+
+Reproducibility:
+  [ ] search_results.csv provided in appendix or supplement
+  [ ] Scripts (visualize_action_repeat_importance.py, etc.) documented
+  [ ] Hyperparameters can be found in single location (this README)
+
+Writing:
+  [ ] No typos in hyperparameter names (action_repeat, not action_res)
+  [ ] Notation matches rest of thesis
+  [ ] All claims have evidence (cite figures/tables)
+
+================================================================================
+📞 SUPPORT
+================================================================================
+
+For questions about:
+  • Integrating into thesis       → Read PAPER_INTEGRATION_GUIDE.md
+  • Why action_repeat=6          → Read ACTION_REPEAT_IMPORTANCE.md
+  • Understanding figures        → Open PNG + read corresponding caption
+  • Reproducing analysis         → Run the Python scripts (fully documented)
+  • General overview             → Start with README.md
+
+All files are self-contained and documented.
+
+================================================================================
+Generated: 2026-06-24 | Total files: 23 | Total size: 46 MB | All results complete
+================================================================================

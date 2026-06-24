@@ -1,0 +1,226 @@
+================================================================================
+REWARD ANALYSIS FOLDER: CLEAN & ORGANIZED
+================================================================================
+
+Location: /home/alex/Physi/PhysiCell/custom_modules/physigym/physigym/envs/reward_analysis/
+
+================================================================================
+FOLDER HIERARCHY
+================================================================================
+
+reward_analysis/
+├── README.md                          ← START HERE: Overview & quick start
+├── STRUCTURE.txt                      ← This file: folder map
+│
+├── _guides/                           ← 📚 DOCUMENTATION (8 main guides)
+│   ├── 00_START_HERE.md              (orientation)
+│   ├── README.md                      (comprehensive overview)
+│   ├── INDEX.txt                      (quick reference)
+│   ├── PAPER_INTEGRATION_GUIDE.md     (how to write in thesis)
+│   ├── ACTION_REPEAT_IMPORTANCE.md    (why AR=6 dominates)
+│   ├── REWARD_ANALYSIS_SUMMARY.md     (concise summary)
+│   ├── HYPERPARAMETER_DEFENSE.md      (detailed justification)
+│   ├── search_report.md               (auto-generated)
+│   │
+│   └── smoothness/                    (7 defense documents)
+│       ├── DEFENSE_SMOOTHNESS_PENALTY.md
+│       ├── SMOOTHNESS_CORRECTED_TIMESCALE.md
+│       ├── SMOOTHNESS_QUICK_REFERENCE.txt
+│       ├── COMPLETE_SMOOTHNESS_DEFENSE.txt
+│       ├── TIMESCALE_VISUAL.txt
+│       ├── CREDIT_ASSIGNMENT_INSIGHT.md
+│       └── SMOOTHNESS_DEFENSE_SUMMARY.md
+│
+├── _figures/                          ← 📊 PLOTS (14 publication-ready PNG)
+│   ├── fig_action_repeat_deep_dive.png          (MAIN: 4-panel)
+│   ├── fig_param_importance.png                 (Optuna importance)
+│   ├── fig_sobol.png                            (Variance decomposition)
+│   ├── fig_outcome_cis.png                      (Bootstrap CIs)
+│   ├── fig_immune_response_window.png           (Biological context)
+│   ├── fig_action_repeat_phase_space.png        (Tradeoff)
+│   ├── fig_action_repeat_sensitivity.png        (1D curves)
+│   ├── fig_lhs_objective.png                    (All parameters)
+│   ├── fig_time_series.png                      (Episode evolution)
+│   ├── fig_reward_weight_correlation.png        (Heatmap)
+│   ├── fig_reward_weight_distributions.png      (Distributions)
+│   ├── fig_optuna_param_importance_rewards_static.png
+│   └── fig_dynamics_vs_rewards_importance.png
+│
+├── _data/                             ← 📊 RAW RESULTS (4 CSV files)
+│   ├── search_results.csv             (240 rows, all outcomes)
+│   ├── raw_components.csv             (per-episode data, 45 MB)
+│   ├── lhs_design.csv                 (20 LHS points)
+│   └── param_importance.csv           (Optuna scores)
+│
+├── _code/                             ← 🐍 SCRIPTS (5 Python files)
+│   ├── visualize_action_repeat_importance.py
+│   ├── analyze_reward_coefficients.py
+│   ├── hyperparam_search.py
+│   ├── reward_analysis.py
+│   └── test_hyperparams.py
+│
+└── _thesis_templates/                 ← 📝 COPY-PASTE TEMPLATES
+    ├── 00_READ_ME_FIRST.md
+    ├── methods_section.md             (Ch3: Sections 3.2.2 & 3.2.3)
+    ├── results_section.md             (Ch4: Section 4.1)
+    └── defense_talking_points.md      (Committee meeting notes)
+
+================================================================================
+FILE COUNTS & SIZES
+================================================================================
+
+_guides/:                 15 files (~80 KB)
+  - Main guides:          8 files
+  - Smoothness defense:   7 files
+
+_figures/:                14 files (~1.3 MB, PNG, 300 DPI)
+
+_data/:                   4 files (~45 MB total)
+  - search_results.csv:   139 KB (USE THIS)
+  - raw_components.csv:   45 MB (keep for reproducibility)
+  - lhs_design.csv:       1.4 KB
+  - param_importance.csv: 219 B
+
+_code/:                   5 files (~100 KB)
+  - All Python scripts fully documented
+
+_thesis_templates/:       4 files (~40 KB)
+
+Root:                     3 files (README.md, STRUCTURE.txt, plus above)
+
+TOTAL:                    ~45 MB (mostly raw_components.csv)
+
+================================================================================
+WHAT EACH FOLDER CONTAINS
+================================================================================
+
+_guides/
+  Purpose: Understand the analysis and how to use it
+  Start with: 00_START_HERE.md
+  Then read: PAPER_INTEGRATION_GUIDE.md (if writing thesis)
+  Then read: smoothness/* (if defending w_smooth penalty)
+  
+_figures/
+  Purpose: Plots for your thesis
+  Main figure: fig_action_repeat_deep_dive.png (use this!)
+  Supporting: fig_param_importance.png, fig_sobol.png, etc.
+  All: 300 DPI, publication-ready
+  
+_data/
+  Purpose: Raw search results for reproducibility
+  Use: search_results.csv (complete data)
+  Keep: raw_components.csv (intermediate, 45 MB, keep for reproducibility)
+  
+_code/
+  Purpose: Reproduce the analysis
+  Main: hyperparam_search.py (the search algorithm)
+  Analysis: visualize_action_repeat_importance.py, analyze_reward_coefficients.py
+  
+_thesis_templates/
+  Purpose: Copy-paste sections into your thesis
+  Methods: methods_section.md
+  Results: results_section.md
+  Defense: defense_talking_points.md
+
+================================================================================
+HOW TO USE THIS FOLDER
+================================================================================
+
+For understanding:
+  1. Open _guides/00_START_HERE.md
+  2. Read _guides/README.md for full overview
+  3. Read _guides/PAPER_INTEGRATION_GUIDE.md to learn what to write
+  
+For writing your thesis:
+  1. Open _thesis_templates/methods_section.md
+  2. Copy → paste into your thesis Chapter 3
+  3. Open _thesis_templates/results_section.md
+  4. Copy → paste into your thesis Chapter 4
+  5. Insert figures from _figures/ at marked locations
+  
+For defending smoothness:
+  1. Read _guides/smoothness/SMOOTHNESS_QUICK_REFERENCE.txt (5 min)
+  2. Memorize the 60-second response
+  3. Have it on your phone before committee meeting
+  
+For reproducibility:
+  1. Run _code/hyperparam_search.py to regenerate search
+  2. Use _data/search_results.csv for analysis
+  3. All parameters and commands in _guides/HYPERPARAMETER_DEFENSE.md
+
+================================================================================
+QUICK ACCESS: MOST IMPORTANT FILES
+================================================================================
+
+📖 To understand:
+   → _guides/00_START_HERE.md
+   → _guides/README.md
+   
+📝 To write your thesis:
+   → _guides/PAPER_INTEGRATION_GUIDE.md (full templates)
+   → _thesis_templates/methods_section.md (copy-paste)
+   → _thesis_templates/results_section.md (copy-paste)
+   
+📊 To show results:
+   → _figures/fig_action_repeat_deep_dive.png (main plot)
+   → _figures/fig_param_importance.png (supporting)
+   → _figures/fig_sobol.png (supporting)
+   
+🛡️ To defend smoothness:
+   → _guides/smoothness/SMOOTHNESS_QUICK_REFERENCE.txt (cheat sheet)
+   → _guides/smoothness/COMPLETE_SMOOTHNESS_DEFENSE.txt (full response)
+   → _guides/smoothness/CREDIT_ASSIGNMENT_INSIGHT.md (RL angle)
+
+================================================================================
+FILE ORGANIZATION PRINCIPLES
+================================================================================
+
+✅ CLEAN:
+  - No loose files at root
+  - Everything in subfolders
+  - Clear naming conventions
+
+✅ DISCOVERABLE:
+  - Folder names are clear (_guides, _figures, _data, _code)
+  - Each folder has a purpose
+  - README.md at root + in subfolders
+
+✅ NAVIGABLE:
+  - Start with README.md (root)
+  - Then go to appropriate subfolder
+  - Each subfolder has 00_READ_ME_FIRST or README
+
+✅ COMPLETE:
+  - Everything needed for thesis is here
+  - Nothing missing or scattered elsewhere
+  - All references internal (within reward_analysis/)
+
+================================================================================
+MIGRATION FROM OLD STRUCTURE
+================================================================================
+
+What was moved:
+  ❌ Root was chaos (40+ files)
+  ✅ Now organized (_guides, _figures, _data, _code)
+
+What stayed the same:
+  ✅ All files preserved (nothing deleted)
+  ✅ All content unchanged
+  ✅ Search_results.csv still in _data/
+
+What was added:
+  ✅ README.md (root) — master index
+  ✅ STRUCTURE.txt (this file) — folder map
+  ✅ _thesis_templates/ — copy-paste sections
+  ✅ _guides/smoothness/ — organized defense docs
+
+Result:
+  📁 Clean, organized, professional structure
+  📖 Easy to navigate
+  📚 Ready for thesis submission
+  🎓 Ready for defense
+
+================================================================================
+Generated: 2026-06-24
+Status: ✅ Clean & ready to use
+================================================================================

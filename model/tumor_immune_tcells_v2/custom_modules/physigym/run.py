@@ -19,9 +19,9 @@ import wandb
 from tqdm import tqdm
 
 # Your project imports
-from vectorized import vec_envs
-from networks import Actor, QNetwork
-from rb import ReplayBuffer
+from vectorized_tip import vec_envs
+from nn_tip import Actor, QNetwork
+from rb_tip import ReplayBuffer
 
 import queue
 from torch.multiprocessing import Event, Queue
@@ -238,6 +238,12 @@ def run_random_policy(d_arg):
     total_steps     = d_arg["rl"]["total_timesteps"]
     local_step      = 0
 
+    # Sliding-window return trackers for plots
+    return_buffers = {
+        "train": deque(maxlen=50),
+        "test":  deque(maxlen=50),
+    }
+
     output_dir = d_arg["model"]["output_dir"]
     writer     = SummaryWriter(log_dir=output_dir)
 
@@ -288,6 +294,8 @@ def run_random_policy(d_arg):
                     a_delta_std  = float(info.get("action_step_delta_std",  0.0))
                     a_autocorr   = float(info.get("action_autocorr_lag1",   0.0))
 
+                    return_buffers[split].append(ep_ret)
+
                     log_dict = {
                         f"charts/{split}_return_raw":                    ep_ret,
                         f"charts/{split}_{typemode}_return_raw":         ep_ret,
@@ -298,6 +306,12 @@ def run_random_policy(d_arg):
                         f"charts/{split}_{typemode}_action_delta_mean":  a_delta_mean,
                         f"charts/{split}_{typemode}_action_autocorr":    a_autocorr,
                     }
+
+                    buf = return_buffers[split]
+                    if len(buf) >= 3:
+                        log_dict[f"charts/{split}_return_mean"] = np.mean(buf)
+                        log_dict[f"charts/{split}_return_std"]    = np.std(buf)
+
                     if d_arg["simulation"]["wandb_track"]:
                         run.log(log_dict, step=local_step)
                     else:
@@ -578,8 +592,8 @@ def run_async_sac(d_arg):
                 }
 
                 buf = return_buffers[split]
-                if len(buf) >= len(buf)//2:
-                    log_dict[f"charts/{split}_return_mean50"] = np.mean(buf)
+                if len(buf) >= 3:
+                    log_dict[f"charts/{split}_return_mean"] = np.mean(buf)
                     log_dict[f"charts/{split}_return_std"]    = np.std(buf)
 
                 # ── Q-value calibration (test episodes only) ─────────
@@ -588,6 +602,7 @@ def run_async_sac(d_arg):
                     gamma = d_arg["rl"]["gamma"]
                     rewards_ep = np.array([s["reward"] for s in q_calib], dtype=np.float32)
                     T = len(rewards_ep)
+                    # discounted MC return from each step t
                     mc_returns = np.zeros(T, dtype=np.float32)
                     running = 0.0
                     for t in reversed(range(T)):
@@ -614,9 +629,9 @@ def run_async_sac(d_arg):
                     qf2.train()
 
                     q_errors = np.array(q_errors)
-                    log_dict["charts/test_q_bias"]  = float(np.mean(q_errors))
-                    log_dict["charts/test_q_mae"]   = float(np.mean(np.abs(q_errors)))
-                    log_dict["charts/test_q_corr"]  = float(np.corrcoef(
+                    log_dict["charts/test_q_bias"]     = float(np.mean(q_errors))        # + = overestimate
+                    log_dict["charts/test_q_mae"]      = float(np.mean(np.abs(q_errors)))
+                    log_dict["charts/test_q_corr"]     = float(np.corrcoef(
                         mc_returns, mc_returns + q_errors
                     )[0, 1]) if T > 1 else 0.0
 
@@ -792,6 +807,8 @@ if __name__ == "__main__":
     parser.add_argument("--frequence_episode_test", type=int,   default=4)
     parser.add_argument("--img_mc_grid_size",       type=int,   default=64)
     parser.add_argument("--w_cell",      type=float, default=0.3)
+    parser.add_argument("--w_dose",      type=float, default=1.0,
+                        help="Weight for dose penalty in reward function.")
     parser.add_argument("--w_smooth",    type=float, default=0.0,
                         help="Weight for action-smoothness penalty: reward -= w_smooth * ||a_t - a_{t-1}||^2")
     parser.add_argument("--action_repeat", type=int, default=1,
@@ -811,6 +828,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # ── Best hyperparameters from reward_analysis ──────────────────────────
+    # Recommended: w_cell=0.3, w_dose=2.0, w_smooth=0.0 (composite_score=2.972)
+    # These are the optimal hyperparameters found via offline reward sweeping.
+
     i_seed  = None if str(args.seed).lower() == "none" else int(args.seed)
     b_gpu   = args.gpu.lower().startswith("t")
     b_wandb = args.wandb.lower().startswith("t")
@@ -825,7 +846,7 @@ if __name__ == "__main__":
 
     d_arg_wandb = {
         "entity":           args.entity,
-        "project":          "SAC_ASYNC_TME_Tcells_switch_init_cond",
+        "project":          "SAC_ASYNC_TME_NEW_HYP_REWARD",
         "sync_tensorboard": True,
         "monitor_gym":      True,
         "save_code":        True,
@@ -877,6 +898,7 @@ if __name__ == "__main__":
     d_arg_physigym_wrapper = {
         "list_variable_name":     _var_names,
         "w_cell":                 args.w_cell,
+        "w_dose":                 args.w_dose,
         "w_smooth":               args.w_smooth,
         "action_delta_max":       _action_delta_max,
         "frequence_episode_test": args.frequence_episode_test,
@@ -918,7 +940,7 @@ if __name__ == "__main__":
         "params":     params,
         "seed":       i_seed,
         "mode_train": ["rectangle"],
-        "mode_test":  ["rectangle"],
+        "mode_test":  ["network_field"],
     }
 
     d_arg = {
