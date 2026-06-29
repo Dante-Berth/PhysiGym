@@ -111,9 +111,11 @@ def make_physigym_env(env_id: int, cfg: dict):
 
         env = gym.make(**local_model_cfg)
         env = PhysiCellModelWrapper(env, **wrapper_cfg)
-        
-        generation_cfg["seed"] = worker_seed
-        env.reset(generation_cfg=generation_cfg)
+
+        # Create a copy of generation_cfg to avoid modifying the shared dict
+        gen_cfg_copy = generation_cfg.copy()
+        gen_cfg_copy["seed"] = worker_seed
+        env.reset(generation_cfg=gen_cfg_copy)
         return env
 
     return _init

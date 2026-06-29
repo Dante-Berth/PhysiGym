@@ -782,7 +782,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu",          type=str,   default="true")
     parser.add_argument("--observation_mode",          default="transformer_nodes")
     parser.add_argument("--neural_architecture_image", default="impala")
-    parser.add_argument("--max_time_episode",  type=float, default=7200.0)
+    parser.add_argument("--max_time_episode",  type=float, default=500.0)
     parser.add_argument("--learning_starts",   type=int,   default=5_000)
     parser.add_argument("--total_timesteps",   type=int,   default=int(5e5))
     parser.add_argument("--rl_threads",        type=int,   default=4)

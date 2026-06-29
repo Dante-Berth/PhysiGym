@@ -18,27 +18,6 @@ W_CELL=0.3
 W_DOSE=2.0
 W_SMOOTH=0.0
 
-# ── 1. Random policy baseline (single run — obs mode agnostic) ──
-echo "============================================================"
-echo "  RANDOM BASELINE  seed=${SEEDS[0]}  observation_mode=${OBS_MODES[0]}"
-echo "  Hyperparameters: w_cell=${W_CELL} w_dose=${W_DOSE} w_smooth=${W_SMOOTH}"
-echo "============================================================"
-python custom_modules/physigym/physigym/envs/run.py \
-  --mode           random          \
-  --seed           "${SEEDS[0]}"   \
-  --observation_mode "${OBS_MODES[0]}" \
-  --action_mode    targeted        \
-  --w_cell         ${W_CELL}       \
-  --w_dose         ${W_DOSE}       \
-  --w_smooth       ${W_SMOOTH}     \
-  --action_repeat  6               \
-  --delta_x        0.25            \
-  --delta_y        0.25            \
-  --delta_radius   0.03            \
-  --total_timesteps 100000         \
-  --wandb          true            \
-  --name           "best_hyperparameters_RANDOM_baseline_w_cell=${W_CELL}_w_dose=${W_DOSE}_w_smooth=${W_SMOOTH}_seed${SEEDS[0]}"
-
 # ── 2. SAC training runs (one per obs mode) ─────────────────────
 for seed in "${SEEDS[@]}"; do
   for obs in "${OBS_MODES[@]}"; do
@@ -62,3 +41,24 @@ for seed in "${SEEDS[@]}"; do
       --name           "best_hyperparameters_SAC_${obs}_w_cell=${W_CELL}_w_dose=${W_DOSE}_w_smooth=${W_SMOOTH}_seed${seed}"
   done
 done
+
+# ── 1. Random policy baseline (single run — obs mode agnostic) ──
+echo "============================================================"
+echo "  RANDOM BASELINE  seed=${SEEDS[0]}  observation_mode=${OBS_MODES[0]}"
+echo "  Hyperparameters: w_cell=${W_CELL} w_dose=${W_DOSE} w_smooth=${W_SMOOTH}"
+echo "============================================================"
+python custom_modules/physigym/physigym/envs/run.py \
+  --mode           random          \
+  --seed           "${SEEDS[0]}"   \
+  --observation_mode "${OBS_MODES[0]}" \
+  --action_mode    targeted        \
+  --w_cell         ${W_CELL}       \
+  --w_dose         ${W_DOSE}       \
+  --w_smooth       ${W_SMOOTH}     \
+  --action_repeat  6               \
+  --delta_x        0.25            \
+  --delta_y        0.25            \
+  --delta_radius   0.03            \
+  --total_timesteps 100000         \
+  --wandb          true            \
+  --name           "best_hyperparameters_RANDOM_baseline_w_cell=${W_CELL}_w_dose=${W_DOSE}_w_smooth=${W_SMOOTH}_seed${SEEDS[0]}"

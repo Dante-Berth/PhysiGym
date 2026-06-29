@@ -634,8 +634,11 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             y_bin = np.clip(y_bin, 0, self.kwargs["img_mc_grid_size_y"] - 1)
 
             # Accumulate M1 and M2 counts in image channels
-            np.add.at(image, (np.zeros_like(x_bin), x_bin[m1_mask], y_bin[m1_mask]), 1)
-            np.add.at(image, (np.ones_like(x_bin), x_bin[m2_mask], y_bin[m2_mask]), 1)
+            # Use constant arrays with the correct shape for masked indices
+            if m1_mask.sum() > 0:
+                np.add.at(image, (np.zeros(m1_mask.sum(), dtype=int), x_bin[m1_mask], y_bin[m1_mask]), 1)
+            if m2_mask.sum() > 0:
+                np.add.at(image, (np.ones(m2_mask.sum(), dtype=int), x_bin[m2_mask], y_bin[m2_mask]), 1)
 
         # Normalize and scale to uint8
         scaled_image = image / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y)
