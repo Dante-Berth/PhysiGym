@@ -185,8 +185,9 @@ def actor_process(
                 train_test = info.get("train_test", "train")
                 step_ep    = info.get("step_episode", 0)
                 type_mode  = info.get("type_mode", "unknown")
+                ep_ret     = float(episode_returns[i])
                 stat_entry = {
-                        "episode_return":         float(episode_returns[i]),
+                        "episode_return":         ep_ret,
                         "episode_length":         int(step_ep),
                         "step":                   int(local_step),
                         "timestamp":              time.time() - begin_time,
@@ -203,7 +204,10 @@ def actor_process(
                 try:
                     stats_queue.put_nowait(stat_entry)
                 except queue.Full:
+                    print(f"[ACTOR] stats_queue FULL — dropping episode {train_test} return={ep_ret:.3f} steps={step_ep}")
                     pass
+                # DEBUG: print episode completion info
+                print(f"[ACTOR] env{i} {train_test.upper()} | type={type_mode} | return={ep_ret:.3f} | steps={step_ep}")
                 episode_returns[i] = 0.0
 
             if info["train_test"] == "train":
@@ -308,7 +312,7 @@ def run_random_policy(d_arg):
                     }
 
                     buf = return_buffers[split]
-                    if len(buf) >= 3:
+                    if len(buf) >= 10:
                         log_dict[f"charts/{split}_return_mean"] = np.mean(buf)
                         log_dict[f"charts/{split}_return_std"]    = np.std(buf)
 
@@ -354,7 +358,7 @@ def run_async_sac(d_arg):
     # ── Queues — same as your original ─────────────────────────
     actor_queue    = mp.Queue(maxsize=5)
     sample_queue   = mp.Queue(maxsize=10_000)
-    stats_queue    = mp.Queue(maxsize=100)
+    stats_queue    = mp.Queue(maxsize=500)  # increased from 100 to handle episode bursts
     env_info_queue = mp.Queue(maxsize=1)
     stop_event     = mp.Event()
 
@@ -491,12 +495,20 @@ def run_async_sac(d_arg):
         return path
 
     if d_arg["simulation"]["wandb_track"]:
-        run = wandb.init(
-            project=d_arg["wandb"]["project"] if "wandb" in d_arg else "SAC_ASYNC_TIP",
-            name=Path(output_dir).name,
-            config=d_arg,
-        )
-        run.define_metric("charts/*", step_metric="samples_drained")
+        project_name = d_arg["wandb"]["project"] if "wandb" in d_arg else "SAC_ASYNC_TIP"
+        print(f"[W&B INIT] project={project_name} | name={Path(output_dir).name}")
+        try:
+            run = wandb.init(
+                project=project_name,
+                name=Path(output_dir).name,
+                config=d_arg,
+            )
+            # Define X-axis for all charts/* metrics
+            run.define_metric("charts/*", step_metric="samples_drained")
+            print(f"[W&B INIT] SUCCESS — run_id={run.id}")
+        except Exception as e:
+            print(f"[W&B INIT] FAILED: {e}")
+            raise
 
     tau             = d_arg["rl"]["tau"]
     total_timesteps = d_arg["rl"]["total_timesteps"]
@@ -547,10 +559,13 @@ def run_async_sac(d_arg):
     # ── Training loop ───────────────────────────────────────────
     try:
         print("Starting training loop...")
+        print(f"[CONFIG] total_timesteps={total_timesteps} learning_starts={learning_starts} "
+              f"batch_size={batch_size} freq_test={d_arg['wrapper']['frequence_episode_test']}")
         pbar         = tqdm(total=total_timesteps, dynamic_ncols=True)
         grad_steps   = resume_grad_steps
         _prev_drained = 0
         _grad_budget  = 0.0
+        _episode_count = {}
 
         while drained < total_timesteps:
             pbar.update(drained - pbar.n)
@@ -561,40 +576,59 @@ def run_async_sac(d_arg):
                 "grads":   grad_steps,
             }, refresh=True)
 
-            # ── Log episode stats ────────────────────────────────
+            # DEBUG: periodic summary every 50k samples
+            if drained > 0 and drained % 50_000 == 0 and drained != _prev_drained:
+                n_train = len(return_buffers["train"])
+                n_test = len(return_buffers["test"])
+                print(f"\n[DEBUG] drained={drained:6d} | train_eps={n_train:3d} | test_eps={n_test:3d} | "
+                      f"sample_rate={(drained - _prev_drained) / 50_000:.2f}x")
+
+            # ── PRIORITY: Drain stats_queue completely before any other computation ──
+            # This ensures episode stats are processed ASAP, not blocked by GPU compute
+            stats_processed = 0
             while not stats_queue.empty():
                 try:
                     stat = stats_queue.get_nowait()
                 except queue.Empty:
                     break
+                stats_processed += 1
 
                 split     = stat["train_test"]
                 typemode  = stat.get("type_mode", "unknown")
                 ep_return = stat["episode_return"]
+                ep_length = stat.get("episode_length", 0)
 
                 return_buffers[split].append(ep_return)
+
+                # DEBUG: print episode completion info
+                print(f"[EPISODE] {split.upper()} | type={typemode} | return={ep_return:.3f} | steps={ep_length} | "
+                      f"buf_size={len(return_buffers[split])} | drained={drained}")
 
                 a_delta_mean = stat.get("action_step_delta_mean", 0.0)
                 a_delta_std  = stat.get("action_step_delta_std",  0.0)
                 a_autocorr   = stat.get("action_autocorr_lag1",   0.0)
 
+                # Primary metrics for paper plots
                 log_dict = {
-                    f"charts/{split}_return_raw":            ep_return,
-                    f"charts/{split}_{typemode}_return_raw": ep_return,
-                    "charts/grad_steps":                     grad_steps,
-
-                    # action smoothness — split by train/test and by type_mode
-                    f"charts/{split}_action_delta_mean":             a_delta_mean,
-                    f"charts/{split}_action_delta_std":              a_delta_std,
-                    f"charts/{split}_action_autocorr_lag1":          a_autocorr,
-                    f"charts/{split}_{typemode}_action_delta_mean":  a_delta_mean,
-                    f"charts/{split}_{typemode}_action_autocorr":    a_autocorr,
+                    "samples_drained": drained,  # Track environment steps (visible in W&B)
                 }
 
+                # Rolling statistics (MAIN PLOT for paper: X=samples_drained, Y=return_mean)
                 buf = return_buffers[split]
                 if len(buf) >= 3:
                     log_dict[f"charts/{split}_return_mean"] = np.mean(buf)
                     log_dict[f"charts/{split}_return_std"]    = np.std(buf)
+
+                # Raw episode return (optional, for reference)
+                log_dict[f"charts/{split}_return_raw"] = ep_return
+
+                # Supporting metrics
+                log_dict[f"charts/{split}_episode_length"] = ep_length  # how many steps per episode
+
+                # Action smoothness metrics
+                log_dict[f"charts/{split}_action_delta_mean"]    = a_delta_mean
+                log_dict[f"charts/{split}_action_delta_std"]     = a_delta_std
+                log_dict[f"charts/{split}_action_autocorr_lag1"] = a_autocorr
 
                 # ── Q-value calibration (test episodes only) ─────────
                 q_calib = stat.get("q_calibration_data", None)
@@ -637,9 +671,11 @@ def run_async_sac(d_arg):
 
                 if d_arg["simulation"]["wandb_track"]:
                     run.log(log_dict, step=drained)
+                    print(f"[W&B] Logged {len(log_dict)} metrics at drained={drained}")
                 else:
                     for tag, value in log_dict.items():
                         writer.add_scalar(tag, value, drained)
+                    print(f"[TB] Logged {len(log_dict)} metrics at drained={drained}")
 
             # ── Wait for enough samples ──────────────────────────
             if drained < max(learning_starts, batch_size):
@@ -782,7 +818,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpu",          type=str,   default="true")
     parser.add_argument("--observation_mode",          default="transformer_nodes")
     parser.add_argument("--neural_architecture_image", default="impala")
-    parser.add_argument("--max_time_episode",  type=float, default=500.0)
+    parser.add_argument("--max_time_episode",  type=float, default=7200.0)
     parser.add_argument("--learning_starts",   type=int,   default=5_000)
     parser.add_argument("--total_timesteps",   type=int,   default=int(5e5))
     parser.add_argument("--rl_threads",        type=int,   default=4)
