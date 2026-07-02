@@ -266,11 +266,12 @@ class PhysiCellModelWrapper(gym.Wrapper):
         Test modes rotate deterministically through mode_test pool via
         self._test_mode_idx so every geometry gets equal coverage.
 
-        Video generation
+        Video generation (deferred)
         ────────────────
         On test episodes, each step() captures cells+substrates grids and the
-        action into self._frame_buffer.  save_data() renders all frames to PNG
-        in a temp dir then calls ffmpeg to compile video.mp4.
+        action into self._frame_buffer.  save_data() queues frames for later
+        compilation; compile_pending_videos() processes all queued videos after
+        training completes. This avoids per-episode rendering blocking.
         PhysiCell SVG/full_data output is permanently disabled — all visual
         output comes exclusively from the observation arrays.
         """
@@ -317,6 +318,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # ── Episode state ────────────────────────────────────────
         self.list_data            = []
         self._frame_buffer        = []   # list of dicts: {cells, subs, action, reward, dose, n_tumor}
+        self._pending_videos      = []   # list of {out_dir, run_idx, type_mode, frame_buffer} to compile later
         self._action_history      = []   # list of np.ndarray, one per env step in current episode
         self._decision_anchor     = None # clipped action at start of current decision block
         self._last_raw_decision   = None # raw action of the current decision block
@@ -697,7 +699,12 @@ class PhysiCellModelWrapper(gym.Wrapper):
             self._running_type_mode if self._running_type_mode is not None else self.type_mode
         )
         if self.generate_physicell_data and self._frame_buffer:
-            self._compile_video(out_dir, run_idx, type_mode=finished_type_mode)
+            self._pending_videos.append({
+                "out_dir": out_dir,
+                "run_idx": run_idx,
+                "type_mode": finished_type_mode,
+                "frame_buffer": [f.copy() for f in self._frame_buffer],
+            })
 
         self.list_data     = []
         self._frame_buffer = []
@@ -716,8 +723,10 @@ class PhysiCellModelWrapper(gym.Wrapper):
                 continue
             os.unlink(f.path)
 
-    def _compile_video(self, out_dir: str, run_idx: int, type_mode: str = None):
+    def _compile_video(self, out_dir: str, run_idx: int, type_mode: str = None, frame_buffer: list = None):
         """Render all buffered frames to PNG then compile to video.mp4 via ffmpeg."""
+        if frame_buffer is None:
+            frame_buffer = self._frame_buffer
         if type_mode is None:
             type_mode = self.type_mode
         env_inner        = self.env.unwrapped
@@ -733,7 +742,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         frames_dir = os.path.join(out_dir, "frames")
         os.makedirs(frames_dir, exist_ok=True)
 
-        for i, frame in enumerate(self._frame_buffer):
+        for i, frame in enumerate(frame_buffer):
             reward_so_far.append(frame["reward"])
             dose_so_far.append(frame["dose"])
 
@@ -781,3 +790,21 @@ class PhysiCellModelWrapper(gym.Wrapper):
             self.base_output_dir, mode if mode is not None else self.mode,
             "episodes", f"run_{str(run_idx).zfill(6)}",
         )
+
+    def compile_pending_videos(self):
+        """Compile all queued videos. Call this after training completes."""
+        if not self._pending_videos:
+            return
+
+        print(f"[PhysiCellModelWrapper] Compiling {len(self._pending_videos)} pending videos...")
+        for i, video_task in enumerate(self._pending_videos, 1):
+            print(f"  [{i}/{len(self._pending_videos)}] Compiling video for run {video_task['run_idx']}...")
+            self._compile_video(
+                out_dir=video_task["out_dir"],
+                run_idx=video_task["run_idx"],
+                type_mode=video_task["type_mode"],
+                frame_buffer=video_task["frame_buffer"],
+            )
+
+        self._pending_videos = []
+        print("[PhysiCellModelWrapper] All videos compiled.")

@@ -648,7 +648,7 @@ def run_async_sac(d_arg):
 
                 # Rolling statistics (MAIN PLOT for paper: X=samples_drained, Y=return_mean)
                 buf = return_buffers[split]
-                if len(buf) >= 3:
+                if len(buf) >= 25:
                     log_dict[f"charts/{split}_return_mean"] = np.mean(buf)
                     log_dict[f"charts/{split}_return_std"] = np.std(buf)
 
@@ -856,6 +856,16 @@ def run_async_sac(d_arg):
         writer.close()
         if d_arg["simulation"]["wandb_track"]:
             wandb.finish()
+
+        # ── Video compilation (deferred) ────────────────────────
+        # The wrapper in the actor subprocess has queued pending videos
+        # during training. They're not accessible here since they're in a
+        # subprocess. Instead, compile them post-training with video_maker.py:
+        #
+        #   python video_maker.py --base-dir data/
+        #
+        # This processes both deferred frames/ and legacy SVG snapshots.
+        # It's parallelizable and runs outside the training loop.
 
 
 # --------------------------------------------------------------

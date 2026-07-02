@@ -62,3 +62,15 @@ python custom_modules/physigym/physigym/envs/run.py \
   --total_timesteps 100000         \
   --wandb          true            \
   --name           "best_hyperparameters_RANDOM_baseline_w_cell=${W_CELL}_w_dose=${W_DOSE}_w_smooth=${W_SMOOTH}_seed${SEEDS[0]}"
+
+# ── 3. Compile all pending videos (deferred compilation) ──────────
+# After all training runs complete, compile the queued videos
+# This processes frames captured during test episodes.
+echo "============================================================"
+echo "  Compiling all pending videos..."
+echo "============================================================"
+python custom_modules/physigym/video_maker.py --base-dir data/
+
+echo "============================================================"
+echo "  All training and video compilation complete!"
+echo "============================================================"
