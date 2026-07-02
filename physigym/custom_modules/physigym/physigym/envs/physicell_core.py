@@ -184,6 +184,9 @@ class CorePhysiCellEnv(gymnasium.Env):
 
         # handle verbose
         self.verbose = verbose
+        # mirror verbosity to the C++ extending module so PhysiCell's own console
+        # output (banners, per-step status) is suppressed when running non-verbose
+        os.environ["PHYSIGYM_QUIET"] = "0" if self.verbose else "1"
         if self.verbose:
             print(f"physigym: initialize environment ...")
 
@@ -233,7 +236,6 @@ class CorePhysiCellEnv(gymnasium.Env):
         # Only create figure if rendering is enabled
         if self.render_mode is not None:
             import matplotlib.pyplot as plt  # local import avoids global font init
-
             self.fig, self.axs = plt.subplots(figsize=self.figsize)
 
         if self.verbose:
@@ -254,9 +256,10 @@ class CorePhysiCellEnv(gymnasium.Env):
         self.dx = int(float(self.x_root.xpath("//domain/dx")[0].text))
         self.dy = int(float(self.x_root.xpath("//domain/dy")[0].text))
         self.dz = int(float(self.x_root.xpath("//domain/dz")[0].text))
-        self.width = self.x_max - self.x_min + self.dx
-        self.height = self.y_max - self.y_min + self.dy
-        self.depth = self.z_max - self.z_min + self.dz
+        self.width = self.x_max - self.x_min
+        self.height = self.y_max - self.y_min
+        self.depth = self.z_max - self.z_min
+        self.total_volume = self.width*self.height*self.depth
         if self.verbose:
             print("physigym: self.x_min", self.x_min)
             print("physigym: self.x_max", self.x_max)
@@ -270,6 +273,7 @@ class CorePhysiCellEnv(gymnasium.Env):
             print("physigym: self.width", self.width)
             print("physigym: self.height", self.height)
             print("physigym: self.depth", self.depth)
+            print("physigym: self.total_volume", self.total_volume)
 
         # handle substrate mapping
         if self.verbose:
@@ -316,25 +320,14 @@ class CorePhysiCellEnv(gymnasium.Env):
         self.cell_type_to_color = {}
         if isinstance(cell_type_cmap, dict):
             for s_cell_type in self.cell_type_unique:
-                self.cell_type_to_color[s_cell_type] = cell_type_cmap.get(
-                    s_cell_type, "gray"
-                )
+                self.cell_type_to_color[s_cell_type] = cell_type_cmap.get(s_cell_type, "gray")
 
         elif isinstance(cell_type_cmap, str):
-            # Only use matplotlib colormap if rendering is enabled
-            if self.render_mode is not None:
-                import matplotlib.pyplot as plt
-                import matplotlib.colors as mcolors
-
-                cmap = plt.get_cmap(cell_type_cmap, self.cell_type_count)
-                for i, s_cell_type in enumerate(self.cell_type_unique):
-                    self.cell_type_to_color[s_cell_type] = mcolors.to_hex(
-                        cmap.colors[i]
-                    )
-            else:
-                # fallback: assign gray if no rendering
-                for s_cell_type in self.cell_type_unique:
-                    self.cell_type_to_color[s_cell_type] = "gray"
+            import matplotlib.pyplot as plt
+            import matplotlib.colors as mcolors
+            cmap = plt.get_cmap(cell_type_cmap, self.cell_type_count)
+            for i, s_cell_type in enumerate(self.cell_type_unique):
+                self.cell_type_to_color[s_cell_type] = mcolors.to_hex(cmap.colors[i])
         else:
             raise ValueError(
                 f"cell_type_cmap {cell_type_cmap} must be a dict of strings or a string."
@@ -466,6 +459,7 @@ class CorePhysiCellEnv(gymnasium.Env):
             if self.verbose:
                 print(f"physigym: set {self.settingxml} random_seed to {i_seed}.")
             self.x_root.xpath("//random_seed")[0].text = str(i_seed)
+
 
         # seed self.np_random number generator
         super().reset(seed=i_seed)
