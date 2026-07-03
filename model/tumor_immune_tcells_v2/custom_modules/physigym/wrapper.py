@@ -4,7 +4,6 @@ import numpy as np
 import os
 import pandas as pd
 import shutil
-import subprocess
 from init_conds import generate_initial_condition
 from pathlib import Path
 
@@ -266,12 +265,13 @@ class PhysiCellModelWrapper(gym.Wrapper):
         Test modes rotate deterministically through mode_test pool via
         self._test_mode_idx so every geometry gets equal coverage.
 
-        Video generation (deferred)
+        Video generation
         ────────────────
         On test episodes, each step() captures cells+substrates grids and the
-        action into self._frame_buffer.  save_data() queues frames for later
-        compilation; compile_pending_videos() processes all queued videos after
-        training completes. This avoids per-episode rendering blocking.
+        action into self._frame_buffer. At episode end save_data() dumps the raw
+        buffer to out_dir/frames.npz (a cheap numpy write, no rendering);
+        video_maker.py renders those into video.mp4 as a post-processing step,
+        so the simulation loop is never slowed by matplotlib/ffmpeg work.
         PhysiCell SVG/full_data output is permanently disabled — all visual
         output comes exclusively from the observation arrays.
         """
@@ -318,7 +318,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # ── Episode state ────────────────────────────────────────
         self.list_data            = []
         self._frame_buffer        = []   # list of dicts: {cells, subs, action, reward, dose, n_tumor}
-        self._pending_videos      = []   # list of {out_dir, run_idx, type_mode, frame_buffer} to compile later
         self._action_history      = []   # list of np.ndarray, one per env step in current episode
         self._decision_anchor     = None # clipped action at start of current decision block
         self._last_raw_decision   = None # raw action of the current decision block
@@ -698,23 +697,32 @@ class PhysiCellModelWrapper(gym.Wrapper):
         finished_type_mode = (
             self._running_type_mode if self._running_type_mode is not None else self.type_mode
         )
+        # Dump the raw frame buffer to frames.npz (a cheap numpy write, no
+        # rendering). video_maker.py renders it into video.mp4 afterward, so the
+        # simulation loop is not slowed by matplotlib/ffmpeg work.
         if self.generate_physicell_data and self._frame_buffer:
-            self._pending_videos.append({
-                "out_dir": out_dir,
-                "run_idx": run_idx,
-                "type_mode": finished_type_mode,
-                "frame_buffer": [f.copy() for f in self._frame_buffer],
-            })
+            try:
+                self._dump_frames(
+                    out_dir=out_dir,
+                    run_idx=run_idx,
+                    type_mode=finished_type_mode,
+                    frame_buffer=self._frame_buffer,
+                )
+            except Exception as e:
+                print(f"[PhysiCellModelWrapper] frame dump failed for run {run_idx}: {e}")
 
         self.list_data     = []
         self._frame_buffer = []
 
-        # cleanup: keep only video.mp4 and the FINISHED episode's own IC.
-        # Any other CSV here (e.g. the next episode's IC copied by PhysiCell)
-        # would be a leak from a different mode — drop it.
+        # cleanup: keep video.mp4, frames.npz (rendered later by video_maker.py),
+        # and the FINISHED episode's own IC. Any other CSV here (e.g. the next
+        # episode's IC copied by PhysiCell) would be a leak from a different
+        # mode — drop it.
         keep_csv = os.path.basename(finished_csv)
         for f in os.scandir(out_dir):
             if not f.is_file():
+                continue
+            if f.name == "frames.npz":
                 continue
             ext = os.path.splitext(f.name)[1]
             if ext == ".mp4":
@@ -723,88 +731,61 @@ class PhysiCellModelWrapper(gym.Wrapper):
                 continue
             os.unlink(f.path)
 
-    def _compile_video(self, out_dir: str, run_idx: int, type_mode: str = None, frame_buffer: list = None):
-        """Render all buffered frames to PNG then compile to video.mp4 via ffmpeg."""
-        if frame_buffer is None:
-            frame_buffer = self._frame_buffer
+    def _dump_frames(self, out_dir: str, run_idx: int, type_mode: str = None, frame_buffer: list = None):
+        """Serialize the raw frame buffer + episode metadata to out_dir/frames.npz.
+
+        This intentionally does NO rendering: no matplotlib, no cv2, no ffmpeg —
+        only a numpy array write. All the expensive per-step figure rendering is
+        deferred to video_maker.py, which loads frames.npz and builds video.mp4
+        as a post-processing step, so it never slows down the simulation.
+
+        Args:
+            out_dir: directory that receives frames.npz
+            run_idx: episode index
+            type_mode: geometry type (network_field, circular, etc)
+            frame_buffer: list of frame dicts. If None, uses self._frame_buffer (for backward compat).
+        """
         if type_mode is None:
             type_mode = self.type_mode
+        if frame_buffer is None:
+            frame_buffer = self._frame_buffer
+
+        if not frame_buffer:
+            return
+
         env_inner        = self.env.unwrapped
         cell_type_names  = list(env_inner.cell_type_to_id.keys())
         cell_type_colors = env_inner.cell_type_to_color
         substrate_names  = list(env_inner.substrate_unique)
-        episode          = run_idx
 
-        reward_so_far = []
-        dose_so_far   = []
+        # Stack per-step arrays; keep everything numpy so np.savez is the only cost.
+        cells   = np.stack([f["cells"]  for f in frame_buffer], axis=0)   # (T, n_types, H, W)
+        subs    = np.stack([f["subs"]   for f in frame_buffer], axis=0)   # (T, n_subs,  H, W)
+        actions = np.stack([np.asarray(f["action"]) for f in frame_buffer], axis=0)
+        rewards = np.asarray([f["reward"] for f in frame_buffer], dtype=np.float32)
+        doses   = np.asarray([f["dose"]   for f in frame_buffer], dtype=np.float32)
 
-        import cv2
-        frames_dir = os.path.join(out_dir, "frames")
-        os.makedirs(frames_dir, exist_ok=True)
-
-        for i, frame in enumerate(frame_buffer):
-            reward_so_far.append(frame["reward"])
-            dose_so_far.append(frame["dose"])
-
-            rgb = _render_frame(
-                cells_img       = frame["cells"],
-                subs_img        = frame["subs"],
-                cell_type_names = cell_type_names,
-                cell_type_colors= cell_type_colors,
-                substrate_names = substrate_names,
-                action          = frame["action"],
-                step            = i,
-                episode         = episode,
-                type_mode       = type_mode,
-                reward_history  = list(reward_so_far),
-                dose_history    = list(dose_so_far),
-                x_min           = env_inner.x_min,
-                x_max           = env_inner.x_max,
-                y_min           = env_inner.y_min,
-                y_max           = env_inner.y_max,
-            )
-
-            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-            cv2.imwrite(os.path.join(frames_dir, f"frame_{i:05d}.png"), bgr)
-
-        video_path = os.path.join(out_dir, "video.mp4")
-        subprocess.run(
-            [
-                "ffmpeg", "-y",
-                "-framerate", "10",
-                "-i", os.path.join(frames_dir, "frame_%05d.png"),
-                "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-                "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                "-threads", "1",
-                video_path,
-            ],
-            check=True,
-            capture_output=True,
+        np.savez_compressed(
+            os.path.join(out_dir, "frames.npz"),
+            cells=cells,
+            subs=subs,
+            actions=actions,
+            rewards=rewards,
+            doses=doses,
+            # metadata needed by _render_frame, stored as object arrays / scalars
+            cell_type_names=np.array(cell_type_names, dtype=object),
+            cell_type_colors=np.array(
+                [cell_type_colors[n] for n in cell_type_names], dtype=object
+            ),
+            substrate_names=np.array(substrate_names, dtype=object),
+            type_mode=str(type_mode),
+            episode=int(run_idx),
+            x_min=float(env_inner.x_min), x_max=float(env_inner.x_max),
+            y_min=float(env_inner.y_min), y_max=float(env_inner.y_max),
         )
-
-        # remove temp frames/ folder; the broader cleanup is handled in save_data()
-        shutil.rmtree(frames_dir, ignore_errors=True)
 
     def _episode_output_dir(self, run_idx: int, mode: str = None) -> str:
         return os.path.join(
             self.base_output_dir, mode if mode is not None else self.mode,
             "episodes", f"run_{str(run_idx).zfill(6)}",
         )
-
-    def compile_pending_videos(self):
-        """Compile all queued videos. Call this after training completes."""
-        if not self._pending_videos:
-            return
-
-        print(f"[PhysiCellModelWrapper] Compiling {len(self._pending_videos)} pending videos...")
-        for i, video_task in enumerate(self._pending_videos, 1):
-            print(f"  [{i}/{len(self._pending_videos)}] Compiling video for run {video_task['run_idx']}...")
-            self._compile_video(
-                out_dir=video_task["out_dir"],
-                run_idx=video_task["run_idx"],
-                type_mode=video_task["type_mode"],
-                frame_buffer=video_task["frame_buffer"],
-            )
-
-        self._pending_videos = []
-        print("[PhysiCellModelWrapper] All videos compiled.")
