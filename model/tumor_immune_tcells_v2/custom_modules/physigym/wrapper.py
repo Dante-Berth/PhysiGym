@@ -34,6 +34,9 @@ def _render_frame(
     dose_history,       # list of per-step doses up to this step
     x_min=0.0, x_max=1.0,   # env.unwrapped.x_min / x_max (physical units)
     y_min=0.0, y_max=1.0,   # env.unwrapped.y_min / y_max (physical units)
+    inj_x=None,             # physical injection center x as applied to the sim
+    inj_y=None,             # physical injection center y as applied to the sim
+    inj_radius=None,        # physical injection radius as applied to the sim
 ):
     """
     Renders one video frame as a matplotlib figure and returns a numpy RGB array.
@@ -60,10 +63,21 @@ def _render_frame(
     y_norm      = float(action[2]) if len(action) > 2 else 0.5
     radius_norm = float(action[3]) if len(action) > 3 else 0.0
 
-    # injection circle in physical coords
-    cx_phys = x_min + x_norm * domain_width
-    cy_phys = y_min + y_norm * domain_height
-    r_phys  = radius_norm * max(domain_width, domain_height)
+    # injection circle in physical coords.
+    # Prefer the geometry actually applied to the sim (passed in from the frame
+    # buffer) so the overlay matches the drug substrate. Only fall back to
+    # re-deriving from the raw action for legacy npz files that lack it — note
+    # that fallback is approximate and will NOT match the wrapper's 5–20%
+    # half-diagonal radius mapping.
+    if inj_x is not None and inj_y is not None and inj_radius is not None \
+            and not (np.isnan(inj_x) or np.isnan(inj_y) or np.isnan(inj_radius)):
+        cx_phys = inj_x
+        cy_phys = inj_y
+        r_phys  = inj_radius
+    else:
+        cx_phys = x_min + x_norm * domain_width
+        cy_phys = y_min + y_norm * domain_height
+        r_phys  = radius_norm * max(domain_width, domain_height)
 
     # ── composite: blend all cell types onto white background ────────
     # Fixed colors regardless of what the env colormap assigned:
@@ -617,6 +631,13 @@ class PhysiCellModelWrapper(gym.Wrapper):
                 "cells":   env_inner.get_matrix_cells().copy(),    # uint8 (n_types, H, W)
                 "subs":    env_inner.get_matrix_substrates().copy(), # uint8 (n_subs,  H, W)
                 "action":  action.copy(),                           # raw [0,1] values
+                # physical injection geometry as actually applied to the sim
+                # (same transform as d_action), so the overlay circle matches
+                # the drug substrate instead of re-deriving with a different
+                # formula. See _render_frame.
+                "inj_x":      float(d_action["drug_1_x"][0]),
+                "inj_y":      float(d_action["drug_1_y"][0]),
+                "inj_radius": float(d_action["drug_1_radius"][0]),
                 "reward":  reward,
                 "dose":    dose_spent,
                 "n_tumor": info.get("number_tumor", 0),
@@ -764,6 +785,10 @@ class PhysiCellModelWrapper(gym.Wrapper):
         actions = np.stack([np.asarray(f["action"]) for f in frame_buffer], axis=0)
         rewards = np.asarray([f["reward"] for f in frame_buffer], dtype=np.float32)
         doses   = np.asarray([f["dose"]   for f in frame_buffer], dtype=np.float32)
+        # physical injection geometry actually applied to the sim (see append site)
+        inj_x   = np.asarray([f.get("inj_x", np.nan)      for f in frame_buffer], dtype=np.float32)
+        inj_y   = np.asarray([f.get("inj_y", np.nan)      for f in frame_buffer], dtype=np.float32)
+        inj_r   = np.asarray([f.get("inj_radius", np.nan) for f in frame_buffer], dtype=np.float32)
 
         np.savez_compressed(
             os.path.join(out_dir, "frames.npz"),
@@ -772,6 +797,9 @@ class PhysiCellModelWrapper(gym.Wrapper):
             actions=actions,
             rewards=rewards,
             doses=doses,
+            inj_x=inj_x,
+            inj_y=inj_y,
+            inj_radius=inj_r,
             # metadata needed by _render_frame, stored as object arrays / scalars
             cell_type_names=np.array(cell_type_names, dtype=object),
             cell_type_colors=np.array(

@@ -493,9 +493,9 @@ def run_async_sac(d_arg):
 
     ckpt_dir = os.path.join(output_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
-    ckpt_frequency = d_arg["rl"].get("checkpoint_frequency", 10_000)
+    ckpt_frequency = d_arg["rl"].get("checkpoint_frequency", 5_000)
 
-    def save_checkpoint(tag: str, step: int):
+    def save_checkpoint(tag: str, step: int, also_latest: bool = True):
         path = os.path.join(ckpt_dir, f"sac_{tag}.pt")
         state = {
             "actor": actor.state_dict(),
@@ -513,7 +513,19 @@ def run_async_sac(d_arg):
         if d_arg["rl"]["autotune"]:
             state["log_alpha"] = log_alpha.detach().cpu()
             state["alpha_optim"] = alpha_optim.state_dict()
-        torch.save(state, path)
+        # Atomic write: save to a temp file then rename, so a crash
+        # mid-torch.save (OOM/SIGKILL/disk-full) can never leave a
+        # truncated .pt in place of a good one.
+        tmp = path + ".tmp"
+        torch.save(state, tmp)
+        os.replace(tmp, path)
+        # Always keep a rolling "latest" so there is a recent recoverable
+        # checkpoint even if the process is killed before a clean exit.
+        if also_latest:
+            latest = os.path.join(ckpt_dir, "sac_latest.pt")
+            tmp_latest = latest + ".tmp"
+            torch.save(state, tmp_latest)
+            os.replace(tmp_latest, latest)
         return path
 
     if d_arg["simulation"]["wandb_track"]:
@@ -592,6 +604,11 @@ def run_async_sac(d_arg):
         _prev_drained = 0
         _grad_budget = 0.0
         _episode_count = {}
+        # Track the last grad_step at which we checkpointed so the periodic
+        # save triggers on *crossing* a multiple of ckpt_frequency rather than
+        # landing exactly on one — the batched inner loop advances grad_steps
+        # in chunks and would otherwise skip over exact multiples.
+        _last_ckpt_step = resume_grad_steps
 
         while drained < total_timesteps:
             pbar.update(drained - pbar.n)
@@ -821,7 +838,8 @@ def run_async_sac(d_arg):
                         step=drained,
                     )
 
-                if grad_steps > 0 and grad_steps % ckpt_frequency == 0:
+                if grad_steps > 0 and (grad_steps // ckpt_frequency) > (_last_ckpt_step // ckpt_frequency):
+                    _last_ckpt_step = grad_steps
                     path = save_checkpoint(f"step{grad_steps:08d}", grad_steps)
                     print(f"[checkpoint] saved {path}")
 
@@ -896,7 +914,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_loops", type=int, default=3)
     parser.add_argument("--policy_frequency", type=int, default=2)
     parser.add_argument("--target_network_frequency", type=int, default=1)
-    parser.add_argument("--checkpoint_frequency", type=int, default=50_000)
+    parser.add_argument("--checkpoint_frequency", type=int, default=5_000)
     parser.add_argument(
         "--grad_utd",
         type=float,

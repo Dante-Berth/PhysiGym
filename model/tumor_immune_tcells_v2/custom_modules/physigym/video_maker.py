@@ -31,6 +31,11 @@ def _render_npz_to_frames(npz_path: Path, frames_dir: Path):
     actions = data["actions"]
     rewards = data["rewards"]
     doses   = data["doses"]
+    # physical injection geometry as applied to the sim (may be absent in
+    # older npz files → fall back to None so _render_frame re-derives).
+    inj_x = data["inj_x"] if "inj_x" in data.files else None
+    inj_y = data["inj_y"] if "inj_y" in data.files else None
+    inj_r = data["inj_radius"] if "inj_radius" in data.files else None
 
     cell_type_names  = list(data["cell_type_names"])
     cell_type_colors = {
@@ -58,6 +63,9 @@ def _render_npz_to_frames(npz_path: Path, frames_dir: Path):
             dose_history    = list(doses[: i + 1]),
             x_min           = x_min, x_max=x_max,
             y_min           = y_min, y_max=y_max,
+            inj_x           = None if inj_x is None else float(inj_x[i]),
+            inj_y           = None if inj_y is None else float(inj_y[i]),
+            inj_radius      = None if inj_r is None else float(inj_r[i]),
         )
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         cv2.imwrite(str(frames_dir / f"frame_{i:05d}.png"), bgr)
@@ -210,12 +218,41 @@ def _cleanup_non_essential(run_dir: Path):
             f.unlink()
 
 
-def find_all_runs(base_dir: Path):
+def _run_number(run_dir: Path) -> int:
+    """Extract the numeric index from a run_XXXXXX directory name (0 if absent)."""
+    m = re.search(r"run_0*(\d+)", run_dir.name)
+    return int(m.group(1)) if m else 0
+
+
+def find_all_runs(base_dir: Path, last_n: int = None):
     """
-    Recursively find ALL run_* directories anywhere under base_dir.
-    Works regardless of nesting depth.
+    Recursively find run_* directories anywhere under base_dir.
+
+    If last_n is given, keep only the last_n highest-numbered runs *per
+    episodes group* — i.e. per (env, train/test) directory — so each env
+    keeps its most recent runs instead of rendering the whole history.
+    Runs not selected are returned separately so the caller can drop their
+    raw frames.npz rather than leaving stale data behind.
+
+    Returns (selected_runs, skipped_runs).
     """
-    return [d for d in base_dir.rglob("run_*") if d.is_dir()]
+    all_runs = [d for d in base_dir.rglob("run_*") if d.is_dir()]
+    if last_n is None:
+        return all_runs, []
+
+    # group by parent (the episodes/ dir, unique per env + split)
+    groups: dict[Path, list[Path]] = {}
+    for d in all_runs:
+        groups.setdefault(d.parent, []).append(d)
+
+    selected, skipped = [], []
+    for parent, runs in groups.items():
+        runs_sorted = sorted(runs, key=_run_number)
+        keep = runs_sorted[-last_n:] if last_n > 0 else []
+        drop = runs_sorted[:-last_n] if last_n > 0 else runs_sorted
+        selected.extend(keep)
+        skipped.extend(drop)
+    return selected, skipped
 
 
 def main():
@@ -240,10 +277,26 @@ def main():
         default=max(1, cpu_count() // 2),
         help="Number of worker processes (default: CPU_COUNT // 2)",
     )
+    parser.add_argument(
+        "--last-n",
+        type=int,
+        default=None,
+        help="Only render videos for the last N runs per env (per episodes/ "
+             "group). Older runs are skipped and their raw frames.npz removed. "
+             "Default: render all runs.",
+    )
     args = parser.parse_args()
 
-    runs = find_all_runs(args.base_dir)
-    print(f"Found {len(runs)} runs to process in {args.base_dir}")
+    runs, skipped = find_all_runs(args.base_dir, last_n=args.last_n)
+    print(f"Found {len(runs) + len(skipped)} runs in {args.base_dir}; "
+          f"processing {len(runs)}, skipping {len(skipped)}")
+
+    # For skipped runs, drop the heavy raw frames.npz so it isn't kept around
+    # as if a render had failed. Leave any already-rendered video.mp4 intact.
+    for d in skipped:
+        npz = d / "frames.npz"
+        if npz.exists():
+            npz.unlink()
 
     with Pool(args.workers) as pool:
         pool.map(process_run, runs)
