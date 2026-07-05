@@ -544,6 +544,13 @@ def run_async_sac(d_arg):
             print(f"[W&B INIT] SUCCESS — run_id={run.id}")
         except Exception as e:
             print(f"[W&B INIT] FAILED: {e}")
+            # The actor subprocess is already running; tear it down before we
+            # re-raise, otherwise it is orphaned (holding envs/GPU) since this
+            # failure happens before the training try/finally.
+            stop_event.set()
+            actor_proc.join(timeout=5.0)
+            if actor_proc.is_alive():
+                actor_proc.terminate()
             raise
 
     tau = d_arg["rl"]["tau"]
@@ -593,6 +600,9 @@ def run_async_sac(d_arg):
     drain_thread.start()
 
     # ── Training loop ───────────────────────────────────────────
+    # Initialise before the try so the finally block can always reference it,
+    # even if an exception fires on the first loop-setup statement.
+    grad_steps = resume_grad_steps
     try:
         print("Starting training loop...")
         print(
@@ -600,7 +610,6 @@ def run_async_sac(d_arg):
             f"batch_size={batch_size} freq_test={d_arg['wrapper']['frequence_episode_test']}"
         )
         pbar = tqdm(total=total_timesteps, dynamic_ncols=True)
-        grad_steps = resume_grad_steps
         _prev_drained = 0
         _grad_budget = 0.0
         _episode_count = {}
