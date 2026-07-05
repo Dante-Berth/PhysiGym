@@ -261,6 +261,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         env: gym.Env,
         list_variable_name: list[str] = ["drug_1_dose", "drug_1_x", "drug_1_y", "drug_1_radius"],
         w_cell=0.5,
+        w_dose=1.0,
         w_smooth=0.0,
         action_delta_max=None,
         frequence_episode_test=3,
@@ -282,10 +283,9 @@ class PhysiCellModelWrapper(gym.Wrapper):
         Video generation
         ────────────────
         On test episodes, each step() captures cells+substrates grids and the
-        action into self._frame_buffer. At episode end save_data() dumps the raw
-        buffer to out_dir/frames.npz (a cheap numpy write, no rendering);
-        video_maker.py renders those into video.mp4 as a post-processing step,
-        so the simulation loop is never slowed by matplotlib/ffmpeg work.
+        action into self._frame_buffer. At episode end save_data() renders those
+        frames to PNGs under out_dir/frames/ (kept on disk); video_maker.py then
+        compiles them into video.mp4 as a post-processing step.
         PhysiCell SVG/full_data output is permanently disabled — all visual
         output comes exclusively from the observation arrays.
         """
@@ -303,6 +303,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         )
 
         self.w_cell   = w_cell
+        self.w_dose   = w_dose
         self.w_smooth = w_smooth
         # per-component max step in normalised [0,1] space; None = unconstrained
         # for "targeted" mode components are [dose, x_norm, y_norm, radius_norm]
@@ -345,6 +346,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.generation_cfg       = None
         self.no_generation_cfg    = None
         self.generate_physicell_data = False
+        self.emit_reward_analysis_rows = False
         self.dataset_name         = "default"
 
         # ── Mode tracking ────────────────────────────────────────
@@ -479,7 +481,13 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # 2. Decide mode for the next episode
         next_episode = self.env.unwrapped.episode + 1
         self.mode = "test" if (next_episode % self.frequence_episode_test == 0) else "train"
-        self.generate_physicell_data = (self.mode == "test")
+        # During reward-analysis / hyperparameter-search rollouts we only want the
+        # CSV reward rows — suppress per-test-episode spatial frame capture and the
+        # ffmpeg video.mp4 compile (which also writes mat/svg/html) to save disk.
+        self.generate_physicell_data = (
+            self.mode == "test"
+            and not getattr(self, "emit_reward_analysis_rows", False)
+        )
 
         # 3. Initial condition generation now sees the correct mode.
         #    This updates self.csv_path_init and self.type_mode for the next episode.
@@ -568,6 +576,20 @@ class PhysiCellModelWrapper(gym.Wrapper):
         obs, r_cancer_cells, terminated, truncated, info = self.env.step(d_action)
         dose_spent = self.env.unwrapped.get_wrapper_attr("get_dose_spent")()
 
+        # ── mechanistic signals for reward analysis ──────────────────
+        # T cells (not the drug) do the killing; the drug only modulates the
+        # microenvironment. Log per-step effector populations and the raw tumor
+        # decrease so reward shaping can be attributed offline.
+        env_u = self.env.unwrapped
+        try:
+            df_alive = env_u.df_alive
+            n_tcell      = int((df_alive["type"] == "t_cell").sum())
+            n_macrophage = int((df_alive["type"] == "macrophage").sum())
+        except Exception:
+            n_tcell, n_macrophage = 0, 0
+        # tumor cells removed this step (>0 means kill); normalised reward is r_cancer_cells
+        tumor_killed = float(getattr(env_u, "c_prev", 0) or 0) - float(getattr(env_u, "c_t", 0) or 0)
+
         info.update({
             "dose_spent":   dose_spent,
             "type_mode":    self.type_mode,
@@ -583,7 +605,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         else:
             smooth_penalty = 0.0
 
-        reward = self.w_cell * r_cancer_cells - dose_spent - self.w_smooth * smooth_penalty
+        reward = self.w_cell * r_cancer_cells - self.w_dose * dose_spent - self.w_smooth * smooth_penalty
 
         # raw action components in [0, 1] — same values the video annotates
         action_dose   = float(action[0]) if len(action) > 0 else 0.0
@@ -597,8 +619,13 @@ class PhysiCellModelWrapper(gym.Wrapper):
         row = {
             "step":          self.env.unwrapped.step_episode,
             "reward":        reward,
+            "r_cancer_cells": float(r_cancer_cells),
             "dose_spent":    dose_spent,
             "number_tumor":  info.get("number_tumor", 0),
+            "n_tcell":       n_tcell,
+            "n_macrophage":  n_macrophage,
+            "tumor_killed":  tumor_killed,
+            "smooth_penalty": smooth_penalty,
             "train_test":    self.mode,
             "type_mode":     self.type_mode,
             "action_dose":   action_dose,
@@ -623,6 +650,11 @@ class PhysiCellModelWrapper(gym.Wrapper):
             if self.generate_physicell_data and self._q_calib_buffer:
                 info["q_calibration_data"] = self._q_calib_buffer.copy()
             self._q_calib_buffer = []
+            # reward-analysis hook: surface the finished episode's per-step raw
+            # components through info so a parallel SubprocVecEnv can collect them
+            # (the subprocess auto-resets after done, wiping self.list_data).
+            if getattr(self, "emit_reward_analysis_rows", False):
+                info["reward_analysis_rows"] = [dict(r) for r in self.list_data]
 
         # capture spatial frame for test episodes only
         if self.generate_physicell_data:
@@ -718,6 +750,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         finished_type_mode = (
             self._running_type_mode if self._running_type_mode is not None else self.type_mode
         )
+
         # Dump the raw frame buffer to frames.npz (a cheap numpy write, no
         # rendering). video_maker.py renders it into video.mp4 afterward, so the
         # simulation loop is not slowed by matplotlib/ffmpeg work.

@@ -13,9 +13,9 @@ import numpy as np
 
 BASE_DIR = Path("/home/alex/Physi/PhysiCell/data")
 
-# _render_frame lives in wrapper.py (same directory as this script); make it
-# importable so this script can turn a frames.npz into rendered PNGs.
-_ENVS_DIR = Path(__file__).resolve().parent
+# _render_frame lives in the physigym wrapper; make it importable so this script
+# can turn a frames.npz (raw per-step arrays) into rendered PNGs.
+_ENVS_DIR = Path(__file__).resolve().parent / "custom_modules" / "physigym" / "physigym" / "envs"
 if str(_ENVS_DIR) not in sys.path:
     sys.path.insert(0, str(_ENVS_DIR))
 
