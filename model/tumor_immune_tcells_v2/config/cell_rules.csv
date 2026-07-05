@@ -1,6 +1,6 @@
-Macrophage,tumor_molecule,increases,pro_tumoral_factor secretion,10,0.5,1,0
-Macrophage,drug_1,decreases,pro_tumoral_factor secretion,0.,0.5,4,0
-Macrophage,drug_1,increases,anti_tumoral_factor secretion,10,0.5,4,0
-Macrophage,tumor_molecule,decreases,anti_tumoral_factor secretion,0,0.5,1,0
-Macrophage,tumor_molecule,decreases,migration speed,0.0001,0.5,4,0
-Tumor,cytokine,increases,apoptosis,1,0.5,4,0
+macrophage,tumor_molecule,increases,pro_tumoral_factor secretion,10,0.5,1,0
+macrophage,drug_1,decreases,pro_tumoral_factor secretion,0.,0.5,4,0
+macrophage,drug_1,increases,anti_tumoral_factor secretion,10,0.5,4,0
+macrophage,tumor_molecule,decreases,anti_tumoral_factor secretion,0,0.5,1,0
+macrophage,tumor_molecule,decreases,migration speed,0.0001,0.5,4,0
+tumor,cytokine,increases,apoptosis,1,0.5,4,0
