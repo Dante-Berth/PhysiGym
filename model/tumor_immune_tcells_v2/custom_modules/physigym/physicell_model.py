@@ -34,6 +34,7 @@ from numpy.fft import fft2, fftshift
 from scipy.special import expit
 from scipy.spatial import cKDTree
 
+
 # function
 class ModelPhysiCellEnv(CorePhysiCellEnv):
     """
@@ -73,7 +74,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         verbose=True,
         # **kwargs
         observation_mode="scalars_cells_substrates",
-        action_mode = "full",
+        action_mode="full",
         img_rgb_grid_size_y=64,  # pixel
         img_rgb_grid_size_x=64,  # pixel
         img_mc_grid_size_x=64,  # pixel
@@ -85,7 +86,9 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         self.observation_mode = observation_mode
         self.grid_n = grid_n
         if "img" in observation_mode:
-            self.observation_mode = observation_mode + str(f"_{img_mc_grid_size_x}_{img_mc_grid_size_y}")
+            self.observation_mode = observation_mode + str(
+                f"_{img_mc_grid_size_x}_{img_mc_grid_size_y}"
+            )
         self.k = k
         self.action_mode = action_mode
 
@@ -130,25 +133,35 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         if self.action_mode == "full":
             d_action_space = spaces.Dict(
                 {
-                    "drug_1_dose": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                    "drug_1_dose": spaces.Box(
+                        low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                    ),
                 }
             )
         else:
             d_action_space = spaces.Dict(
                 {
-                    "drug_1_dose": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
-                    "drug_1_x": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
-                    "drug_1_y": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
-                    "drug_1_radius": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
+                    "drug_1_dose": spaces.Box(
+                        low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                    ),
+                    "drug_1_x": spaces.Box(
+                        low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                    ),
+                    "drug_1_y": spaces.Box(
+                        low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                    ),
+                    "drug_1_radius": spaces.Box(
+                        low=0.0, high=1.0, shape=(1,), dtype=np.float32
+                    ),
                 }
             )
 
         # output
         return d_action_space
-    
+
     def get_dose_spent(self):
-        return physicell.get_parameter("drug_1_amount_used")/(self.total_volume)
-    
+        return physicell.get_parameter("drug_1_amount_used") / (self.total_volume)
+
     def get_observation_space(self):
         """
         input:
@@ -219,7 +232,54 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             o_observation_space = spaces.Box(
                 low=-(2**8),
                 high=2**8,
-                shape=(self.cell_type_count + self.substrate_count + self.cell_type_count * 6 * self.k,),
+                shape=(
+                    self.cell_type_count
+                    + self.substrate_count
+                    + self.cell_type_count * 6 * self.k,
+                ),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "spatial_scalars_cells_m1m2":
+            # like spatial_scalars_cells, but macrophage split into M1 + M2
+            # for both the scalar counts (+1) and the k-means spatial features.
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(
+                    (self.cell_type_count + 1)
+                    + (self.cell_type_count + 1) * 6 * self.k,
+                ),
+                dtype=np.float32,
+            )
+
+        elif self.observation_mode == "spatial_scalars_cells_substrates_m1m2":
+            # like spatial_scalars_cells_substrates, but macrophage split M1 + M2
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(
+                    (self.cell_type_count + 1)
+                    + self.substrate_count
+                    + (self.cell_type_count + 1) * 6 * self.k,
+                ),
+                dtype=np.float32,
+            )
+
+        elif (
+            self.observation_mode
+            == "spatial_scalars_cells_spatial_no_scalars_substrates_m1m2"
+        ):
+            # like spatial_scalars_cells_spatial_no_scalars_substrates,
+            # but macrophage split into M1 + M2 for cell scalars + spatial features
+            o_observation_space = spaces.Box(
+                low=-(2**8),
+                high=2**8,
+                shape=(
+                    (self.cell_type_count + 1)
+                    + self.substrate_count * 6 * self.k
+                    + (self.cell_type_count + 1) * 6 * self.k,
+                ),
                 dtype=np.float32,
             )
 
@@ -227,23 +287,38 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             o_observation_space = spaces.Box(
                 low=-(2**8),
                 high=2**8,
-                shape=(self.cell_type_count + self.substrate_count + self.substrate_count * 6 * self.k + self.cell_type_count * 6 * self.k,),
+                shape=(
+                    self.cell_type_count
+                    + self.substrate_count
+                    + self.substrate_count * 6 * self.k
+                    + self.cell_type_count * 6 * self.k,
+                ),
                 dtype=np.float32,
             )
 
-        elif self.observation_mode == "spatial_scalars_cells_spatial_no_scalars_substrates":
+        elif (
+            self.observation_mode
+            == "spatial_scalars_cells_spatial_no_scalars_substrates"
+        ):
             o_observation_space = spaces.Box(
                 low=-(2**8),
                 high=2**8,
-                shape=(self.cell_type_count + self.substrate_count * 6 * self.k + self.cell_type_count * 6 * self.k,),
+                shape=(
+                    self.cell_type_count
+                    + self.substrate_count * 6 * self.k
+                    + self.cell_type_count * 6 * self.k,
+                ),
                 dtype=np.float32,
             )
         elif self.observation_mode == f"kmeans_spatial_scalars_cells_substrates":
             o_observation_space = spaces.Box(
-                    low=-(2**8),
-                    high=2**8,
-                    shape=(self.substrate_count * 6 * self.k + self.cell_type_count * 6 * self.k,),
-                    dtype=np.float32,
+                low=-(2**8),
+                high=2**8,
+                shape=(
+                    self.substrate_count * 6 * self.k
+                    + self.cell_type_count * 6 * self.k,
+                ),
+                dtype=np.float32,
             )
 
         elif self.observation_mode == "occupancy_grid":
@@ -264,7 +339,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             # per-subs:   4 (conc@tumor, grad_sin, grad_cos, mean_in_spread)
             # per-(type,subs): 1 (mean conc at cell positions)
             n_types = self.cell_type_count
-            n_subs  = self.substrate_count
+            n_subs = self.substrate_count
             n_pairs = n_types * (n_types - 1) // 2
             dim = n_types * 5 + n_pairs * 4 + n_subs * 4 + n_types * n_subs * 1
             o_observation_space = spaces.Box(
@@ -278,9 +353,11 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             # cross_nn block:  n_types * (n_types - 1) * 2  (mean + std nn dist per ordered pair)
             # relational block: same as "relational"
             n_types = self.cell_type_count
-            n_subs  = self.substrate_count
+            n_subs = self.substrate_count
             n_pairs = n_types * (n_types - 1) // 2
-            dim_relational = n_types * 5 + n_pairs * 4 + n_subs * 4 + n_types * n_subs * 1
+            dim_relational = (
+                n_types * 5 + n_pairs * 4 + n_subs * 4 + n_types * n_subs * 1
+            )
             # ordered pairs A→B and B→A (mean_nn_dist, std_nn_dist) each
             dim_cross_nn = n_types * (n_types - 1) * 2
             o_observation_space = spaces.Box(
@@ -364,7 +441,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                     ),
                     dtype=np.uint8,
                 )
-    
+
         else:
             raise ValueError(
                 f"unknown observation type: {self.kwargs['observation_mode']}"
@@ -372,7 +449,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         # output
         return o_observation_space
-    
+
     def get_spatial_substrate_features(self):
         """
         Per substrate: mean, std, min, max, and centroid (x_mean, y_mean)
@@ -388,8 +465,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         for i, s_subs in enumerate(self.substrate_unique):
             microenv = np.asarray(physicell.get_microenv(s_subs))
             # columns: x, y, z, concentration
-            x    = (microenv[:, 0] - self.x_min) / x_range
-            y    = (microenv[:, 1] - self.y_min) / y_range
+            x = (microenv[:, 0] - self.x_min) / x_range
+            y = (microenv[:, 1] - self.y_min) / y_range
             conc = microenv[:, -1]
 
             total = conc.sum()
@@ -440,12 +517,14 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         norm_factor = self.kwargs["normalization_factor"]
 
         # ── fetch substrate voxel positions once ─────────────────
-        pro  = np.asarray(physicell.get_microenv("pro_tumoral_factor"))   # (N,4): x,y,z,conc
+        pro = np.asarray(
+            physicell.get_microenv("pro_tumoral_factor")
+        )  # (N,4): x,y,z,conc
         anti = np.asarray(physicell.get_microenv("anti_tumoral_factor"))  # (N,4)
 
-        voxel_xy  = pro[:, :2]                  # (N, 2)  x,y positions
-        pro_conc  = pro[:, -1]                  # (N,)
-        anti_conc = anti[:, -1]                 # (N,)
+        voxel_xy = pro[:, :2]  # (N, 2)  x,y positions
+        pro_conc = pro[:, -1]  # (N,)
+        anti_conc = anti[:, -1]  # (N,)
 
         tree = cKDTree(voxel_xy)
 
@@ -455,14 +534,16 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         if len(df_mac) > 0:
             mac_xy = df_mac[["x", "y"]].to_numpy()
-            _, nearest = tree.query(mac_xy)          # nearest voxel index per cell
+            _, nearest = tree.query(mac_xy)  # nearest voxel index per cell
             is_M2 = pro_conc[nearest] > anti_conc[nearest]
             n_M2 = int(is_M2.sum())
             n_M1 = len(df_mac) - n_M2
 
         # ── build output: non-mac counts + M1 + M2 ───────────────
         features = []
-        for s_cell_type, i_id in sorted(self.cell_type_to_id.items(), key=lambda kv: kv[1]):
+        for s_cell_type, i_id in sorted(
+            self.cell_type_to_id.items(), key=lambda kv: kv[1]
+        ):
             if s_cell_type == "macrophage":
                 features.append(n_M1 / norm_factor - 1.0)
                 features.append(n_M2 / norm_factor - 1.0)
@@ -487,7 +568,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         # discretize
         x_bin = (
             (df["x"] - self.x_min)
-            / (self.width )
+            / (self.width)
             * (self.kwargs["img_mc_grid_size_x"] - 1)
         ).astype(int)
         y_bin = (
@@ -514,13 +595,12 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             (cell_type_indices, x_bin, y_bin),
             1,
         )
-        
+
         # FIXED: Prevent floats > 1.0 from crashing ski.util.img_as_ubyte
         scaled_image = image / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y)
         clipped_image = np.clip(scaled_image, 0.0, 1.0)
-        
-        return ski.util.img_as_ubyte(clipped_image)
 
+        return ski.util.img_as_ubyte(clipped_image)
 
     def get_matrix_cells(self):
         df = self.df_alive
@@ -573,7 +653,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             for (x_bin, y_bin), value in grouped[subs].items():
                 image[i, x_bin, y_bin] = value
 
-        return ski.util.img_as_ubyte(np.clip(image,0,1))
+        return ski.util.img_as_ubyte(np.clip(image, 0, 1))
 
     def get_matrix_macrophage_polarization(self):
         """
@@ -586,12 +666,14 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
           - Channel 1: M2 macrophages (pro-tumoral dominant)
         """
         # ── fetch substrate voxel positions and concentrations ─────
-        pro  = np.asarray(physicell.get_microenv("pro_tumoral_factor"))   # (N,4): x,y,z,conc
+        pro = np.asarray(
+            physicell.get_microenv("pro_tumoral_factor")
+        )  # (N,4): x,y,z,conc
         anti = np.asarray(physicell.get_microenv("anti_tumoral_factor"))  # (N,4)
 
-        voxel_xy  = pro[:, :2]                  # (N, 2)  x,y positions
-        pro_conc  = pro[:, -1]                  # (N,)
-        anti_conc = anti[:, -1]                 # (N,)
+        voxel_xy = pro[:, :2]  # (N, 2)  x,y positions
+        pro_conc = pro[:, -1]  # (N,)
+        anti_conc = anti[:, -1]  # (N,)
 
         tree = cKDTree(voxel_xy)
 
@@ -610,7 +692,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         if len(df_mac) > 0:
             mac_xy = df_mac[["x", "y"]].to_numpy()
-            _, nearest = tree.query(mac_xy)          # nearest voxel index per cell
+            _, nearest = tree.query(mac_xy)  # nearest voxel index per cell
 
             # Determine M1 vs M2 for each macrophage
             is_M2 = pro_conc[nearest] > anti_conc[nearest]
@@ -636,9 +718,21 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             # Accumulate M1 and M2 counts in image channels
             # Use constant arrays with the correct shape for masked indices
             if m1_mask.sum() > 0:
-                np.add.at(image, (np.zeros(m1_mask.sum(), dtype=int), x_bin[m1_mask], y_bin[m1_mask]), 1)
+                np.add.at(
+                    image,
+                    (
+                        np.zeros(m1_mask.sum(), dtype=int),
+                        x_bin[m1_mask],
+                        y_bin[m1_mask],
+                    ),
+                    1,
+                )
             if m2_mask.sum() > 0:
-                np.add.at(image, (np.ones(m2_mask.sum(), dtype=int), x_bin[m2_mask], y_bin[m2_mask]), 1)
+                np.add.at(
+                    image,
+                    (np.ones(m2_mask.sum(), dtype=int), x_bin[m2_mask], y_bin[m2_mask]),
+                    1,
+                )
 
         # Normalize and scale to uint8
         scaled_image = image / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y)
@@ -654,8 +748,10 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         n_subs = self.substrate_count
         k_clusters = self.k
         features_per_cluster = 6  # [presence, mass_fraction, cx, cy, std_x, std_y]
-        
-        features = np.zeros((n_subs * k_clusters * features_per_cluster,), dtype=np.float32)
+
+        features = np.zeros(
+            (n_subs * k_clusters * features_per_cluster,), dtype=np.float32
+        )
 
         x_range = self.x_max - self.x_min + 1e-8
         y_range = self.y_max - self.y_min + 1e-8
@@ -669,7 +765,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             conc = microenv[:, -1]
 
             total_mass = conc.sum()
-            
+
             # Filter out background noise to speed up K-Means
             # Only cluster points that have at least 1% of the max concentration
             max_conc = conc.max()
@@ -694,10 +790,10 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
             cluster_stats = []
             for c in range(actual_k):
-                c_mask = (labels == c)
+                c_mask = labels == c
                 if not c_mask.any():
                     continue
-                    
+
                 c_conc = valid_conc[c_mask]
                 c_x = valid_x[c_mask]
                 c_y = valid_y[c_mask]
@@ -708,12 +804,14 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
                 # Weighted standard deviation to measure the spread of the plume
                 if len(c_conc) > 1 and c_conc.sum() > 0:
-                    c_std_x = np.sqrt(np.average((c_x - cx)**2, weights=c_conc))
-                    c_std_y = np.sqrt(np.average((c_y - cy)**2, weights=c_conc))
+                    c_std_x = np.sqrt(np.average((c_x - cx) ** 2, weights=c_conc))
+                    c_std_y = np.sqrt(np.average((c_y - cy) ** 2, weights=c_conc))
                 else:
                     c_std_x, c_std_y = 0.0, 0.0
 
-                cluster_stats.append((presence, mass_fraction, cx, cy, c_std_x, c_std_y))
+                cluster_stats.append(
+                    (presence, mass_fraction, cx, cy, c_std_x, c_std_y)
+                )
 
             # Sort hotspots descending by mass fraction (largest hotspot → slot 0)
             cluster_stats.sort(key=lambda item: item[1], reverse=True)
@@ -734,8 +832,10 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         n_types = self.cell_type_count
         k_clusters = self.k
         features_per_cluster = 6  # [presence, global_weight, cx, cy, std_x, std_y]
-        
-        features = np.zeros((n_types * k_clusters * features_per_cluster,), dtype=np.float32)
+
+        features = np.zeros(
+            (n_types * k_clusters * features_per_cluster,), dtype=np.float32
+        )
 
         # The Edge: Get total alive cells across ALL types for true global normalization
         total_alive_cells = len(self.df_alive)
@@ -743,46 +843,136 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         for s_cell_type, i_id in self.cell_type_to_id.items():
             df_type = self.df_alive[self.df_alive["type"] == s_cell_type]
             base_idx = i_id * k_clusters * features_per_cluster
-            
+
             n_cells = len(df_type)
             if n_cells == 0 or total_alive_cells == 0:
                 # Type absent — all k_clusters stay 0.0 (presence = 0.0)
                 continue
-                
+
             x = (df_type["x"].to_numpy() - self.x_min) / self.width
             y = (df_type["y"].to_numpy() - self.y_min) / self.height
             coords = np.column_stack((x, y))
-            
+
             actual_k = min(k_clusters, n_cells)
             kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init=1)
             labels = kmeans.fit_predict(coords)
             centers = kmeans.cluster_centers_
-            
+
             cluster_stats = []
             for c in range(actual_k):
-                c_mask = (labels == c)
+                c_mask = labels == c
                 c_coords = coords[c_mask]
-                
-                presence = 1.0  
-                
+
+                presence = 1.0
+
                 # Normalizing cluster size by the TOTAL cell population
                 global_weight = len(c_coords) / total_alive_cells
-                
+
                 cx, cy = centers[c]
-                
+
                 c_std_x = c_coords[:, 0].std() if len(c_coords) > 1 else 0.0
                 c_std_y = c_coords[:, 1].std() if len(c_coords) > 1 else 0.0
-                    
-                cluster_stats.append((presence, global_weight, cx, cy, c_std_x, c_std_y))
-            
+
+                cluster_stats.append(
+                    (presence, global_weight, cx, cy, c_std_x, c_std_y)
+                )
+
             # Sort descending by global weight to maintain stability in the state array
             cluster_stats.sort(key=lambda item: item[1], reverse=True)
-            
+
             # Populate array
             for c, stats in enumerate(cluster_stats):
                 idx = base_idx + (c * features_per_cluster)
                 features[idx : idx + features_per_cluster] = stats
-                
+
+        return features
+
+    def get_spatial_features_m1m2(self):
+        """
+        Same as get_spatial_features, but the single "macrophage" cell type is
+        split into two spatially independent groups, M1 (anti-tumoral dominant)
+        and M2 (pro-tumoral dominant), classified per macrophage by comparing
+        pro/anti tumoral substrate concentrations at its nearest voxel (same
+        rule as get_macrophage_polarization_scalars). Every other cell type is
+        clustered exactly as before.
+
+        Layout: cell_type_count + 1 groups (macrophage -> M1, M2), each with
+        k_clusters * 6 features ([presence, global_weight, cx, cy, std_x, std_y]).
+        Group order matches cell_type_to_id, with M1 taking the macrophage slot
+        and M2 appended as one extra group at the end.
+        """
+        n_groups = self.cell_type_count + 1  # macrophage split into M1 + M2
+        k_clusters = self.k
+        features_per_cluster = 6  # [presence, global_weight, cx, cy, std_x, std_y]
+
+        features = np.zeros(
+            (n_groups * k_clusters * features_per_cluster,), dtype=np.float32
+        )
+
+        total_alive_cells = len(self.df_alive)
+        if total_alive_cells == 0:
+            return features
+
+        # ── classify macrophages into M1 / M2 by nearest-voxel substrate ──
+        df_mac = self.df_alive[self.df_alive["type"] == "macrophage"]
+        mac_is_m2 = np.zeros(len(df_mac), dtype=bool)
+        if len(df_mac) > 0:
+            pro = np.asarray(physicell.get_microenv("pro_tumoral_factor"))
+            anti = np.asarray(physicell.get_microenv("anti_tumoral_factor"))
+            tree = cKDTree(pro[:, :2])
+            _, nearest = tree.query(df_mac[["x", "y"]].to_numpy())
+            mac_is_m2 = pro[:, -1][nearest] > anti[:, -1][nearest]
+
+        # ── build the list of (group_index, dataframe) to cluster ──
+        # non-macrophage types keep their cell_type_to_id slot; macrophage is
+        # replaced by M1 (its own slot) and M2 (appended extra slot).
+        m2_group_idx = self.cell_type_count  # extra slot appended at the end
+        groups = []
+        for s_cell_type, i_id in self.cell_type_to_id.items():
+            if s_cell_type == "macrophage":
+                groups.append((i_id, df_mac[~mac_is_m2]))  # M1
+                groups.append((m2_group_idx, df_mac[mac_is_m2]))  # M2
+            else:
+                groups.append(
+                    (i_id, self.df_alive[self.df_alive["type"] == s_cell_type])
+                )
+
+        for group_idx, df_group in groups:
+            base_idx = group_idx * k_clusters * features_per_cluster
+            n_cells = len(df_group)
+            if n_cells == 0:
+                continue
+
+            x = (df_group["x"].to_numpy() - self.x_min) / self.width
+            y = (df_group["y"].to_numpy() - self.y_min) / self.height
+            coords = np.column_stack((x, y))
+
+            actual_k = min(k_clusters, n_cells)
+            kmeans = KMeans(n_clusters=actual_k, random_state=42, n_init=1)
+            labels = kmeans.fit_predict(coords)
+            centers = kmeans.cluster_centers_
+
+            cluster_stats = []
+            for c in range(actual_k):
+                c_mask = labels == c
+                c_coords = coords[c_mask]
+
+                presence = 1.0
+                global_weight = len(c_coords) / total_alive_cells
+                cx, cy = centers[c]
+                c_std_x = c_coords[:, 0].std() if len(c_coords) > 1 else 0.0
+                c_std_y = c_coords[:, 1].std() if len(c_coords) > 1 else 0.0
+
+                cluster_stats.append(
+                    (presence, global_weight, cx, cy, c_std_x, c_std_y)
+                )
+
+            cluster_stats.sort(key=lambda item: item[1], reverse=True)
+
+            for c, stats in enumerate(cluster_stats):
+                idx = base_idx + (c * features_per_cluster)
+                features[idx : idx + features_per_cluster] = stats
+
         return features
 
     def get_relational_features(self):
@@ -809,38 +999,38 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         Block 4 — per (cell type, substrate) cross (1 each):
           mean_conc_at_type: mean substrate concentration sampled at each cell's position
         """
-        x_range  = self.x_max - self.x_min + 1e-8
-        y_range  = self.y_max - self.y_min + 1e-8
+        x_range = self.x_max - self.x_min + 1e-8
+        y_range = self.y_max - self.y_min + 1e-8
         diagonal = np.sqrt(x_range**2 + y_range**2) + 1e-8
         total_alive = max(len(self.df_alive), 1)
 
         # ── Pre-compute per-type centroids and spreads ────────────
         type_names = list(self.cell_type_to_id.keys())  # stable order
-        centroids  = {}   # name → (cx_norm, cy_norm)
-        spreads    = {}   # name → (sx_norm, sy_norm)
-        counts     = {}   # name → int
+        centroids = {}  # name → (cx_norm, cy_norm)
+        spreads = {}  # name → (sx_norm, sy_norm)
+        counts = {}  # name → int
 
         for s in type_names:
             df_t = self.df_alive[self.df_alive["type"] == s]
             n = len(df_t)
             counts[s] = n
             if n == 0:
-                centroids[s] = (0.5, 0.5)   # domain centre as neutral
-                spreads[s]   = (0.0, 0.0)
+                centroids[s] = (0.5, 0.5)  # domain centre as neutral
+                spreads[s] = (0.0, 0.0)
             else:
                 cx = (df_t["x"].mean() - self.x_min) / x_range
                 cy = (df_t["y"].mean() - self.y_min) / y_range
                 sx = df_t["x"].std(ddof=0) / x_range if n > 1 else 0.0
                 sy = df_t["y"].std(ddof=0) / y_range if n > 1 else 0.0
                 centroids[s] = (float(cx), float(cy))
-                spreads[s]   = (float(sx), float(sy))
+                spreads[s] = (float(sx), float(sy))
 
         # ── Block 1: per-type features ────────────────────────────
         block1 = []
         for s in type_names:
             cx, cy = centroids[s]
             sx, sy = spreads[s]
-            cf     = counts[s] / total_alive
+            cf = counts[s] / total_alive
             block1.extend([cx, cy, sx, sy, cf])
 
         # ── Block 2: per-pair relational features ─────────────────
@@ -853,7 +1043,9 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
                 dx = bx - ax
                 dy = by - ay
-                dist  = np.sqrt(dx**2 + dy**2) / np.sqrt(2.0)   # max diagonal in [0,1]² = sqrt(2)
+                dist = np.sqrt(dx**2 + dy**2) / np.sqrt(
+                    2.0
+                )  # max diagonal in [0,1]² = sqrt(2)
                 angle = np.arctan2(dy, dx)
                 sin_a = float(np.sin(angle))
                 cos_a = float(np.cos(angle))
@@ -864,7 +1056,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                     overlap = 0.0
                 else:
                     # quadrant defined by domain centre
-                    qx = bx > 0.5   # type-B is left or right half
+                    qx = bx > 0.5  # type-B is left or right half
                     qy = by > 0.5
                     xa_norm = (df_a["x"].to_numpy() - self.x_min) / x_range
                     ya_norm = (df_a["y"].to_numpy() - self.y_min) / y_range
@@ -880,11 +1072,16 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             xn = (me[:, 0] - self.x_min) / x_range
             yn = (me[:, 1] - self.y_min) / y_range
             tree = cKDTree(np.column_stack((xn, yn)))
-            sub_arrays[s_subs] = (xn, yn, me[:, -1], tree)  # (x_norm, y_norm, conc, tree)
+            sub_arrays[s_subs] = (
+                xn,
+                yn,
+                me[:, -1],
+                tree,
+            )  # (x_norm, y_norm, conc, tree)
 
         # ── Block 3: per-substrate, drug-relative features ────────
         tumor_cx, tumor_cy = centroids.get("tumor", (0.5, 0.5))
-        tumor_sx, tumor_sy = spreads.get("tumor",   (0.1, 0.1))
+        tumor_sx, tumor_sy = spreads.get("tumor", (0.1, 0.1))
         tumor_spread = max(np.sqrt(tumor_sx**2 + tumor_sy**2), 1e-3)
 
         block3 = []
@@ -892,7 +1089,11 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             xn, yn, conc, tree = sub_arrays[s_subs]
 
             # concentration at tumor cell positions (nearest voxel via KDTree)
-            df_tumor = self.df_alive[self.df_alive["type"] == "tumor"] if "tumor" in self.cell_type_to_id else pd.DataFrame()
+            df_tumor = (
+                self.df_alive[self.df_alive["type"] == "tumor"]
+                if "tumor" in self.cell_type_to_id
+                else pd.DataFrame()
+            )
             if len(df_tumor) == 0:
                 conc_at_tumor = 0.0
             else:
@@ -907,8 +1108,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             if hot.sum() > 0 and conc.max() > 1e-8:
                 gc_x = float(np.average(xn[hot], weights=conc[hot]))
                 gc_y = float(np.average(yn[hot], weights=conc[hot]))
-                gdx  = gc_x - tumor_cx
-                gdy  = gc_y - tumor_cy
+                gdx = gc_x - tumor_cx
+                gdy = gc_y - tumor_cy
                 gang = np.arctan2(gdy, gdx)
                 grad_sin = float(np.sin(gang))
                 grad_cos = float(np.cos(gang))
@@ -916,16 +1117,18 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 grad_sin, grad_cos = 0.0, 0.0
 
             # mean concentration within 1-std radius of tumor centroid
-            dist_to_tumor = np.sqrt((xn - tumor_cx)**2 + (yn - tumor_cy)**2)
+            dist_to_tumor = np.sqrt((xn - tumor_cx) ** 2 + (yn - tumor_cy) ** 2)
             in_spread = dist_to_tumor <= tumor_spread
             mean_in_spread = float(conc[in_spread].mean()) if in_spread.any() else 0.0
 
-            block3.extend([
-                np.clip(conc_at_tumor, 0.0, 1.0),
-                grad_sin,
-                grad_cos,
-                np.clip(mean_in_spread, 0.0, 1.0),
-            ])
+            block3.extend(
+                [
+                    np.clip(conc_at_tumor, 0.0, 1.0),
+                    grad_sin,
+                    grad_cos,
+                    np.clip(mean_in_spread, 0.0, 1.0),
+                ]
+            )
 
         # ── Block 4: mean substrate at each cell type's positions ──
         block4 = []
@@ -957,26 +1160,26 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
           — all distances normalised by domain diagonal → [0, 1]
           — absent-type slots stay 0.0
         """
-        x_range  = self.x_max - self.x_min + 1e-8
-        y_range  = self.y_max - self.y_min + 1e-8
+        x_range = self.x_max - self.x_min + 1e-8
+        y_range = self.y_max - self.y_min + 1e-8
         diagonal = np.sqrt(x_range**2 + y_range**2) + 1e-8
 
         type_names = list(self.cell_type_to_id.keys())
-        n_types    = len(type_names)
+        n_types = len(type_names)
 
         # Pre-build normalised coords + KDTree per type
         coords = {}
-        trees  = {}
+        trees = {}
         for s in type_names:
             df_t = self.df_alive[self.df_alive["type"] == s]
             if len(df_t) == 0:
                 coords[s] = None
-                trees[s]  = None
+                trees[s] = None
             else:
                 xn = (df_t["x"].to_numpy() - self.x_min) / x_range
                 yn = (df_t["y"].to_numpy() - self.y_min) / y_range
                 coords[s] = np.column_stack((xn, yn))
-                trees[s]  = cKDTree(coords[s])
+                trees[s] = cKDTree(coords[s])
 
         features = []
         for sa in type_names:
@@ -1009,7 +1212,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         """
         n = self.grid_n
         n_types = self.cell_type_count
-        n_subs  = self.substrate_count
+        n_subs = self.substrate_count
         total_cells = max(len(self.df_alive), 1)
 
         cell_grid = np.zeros((n_types, n, n), dtype=np.float32)
@@ -1017,23 +1220,31 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             df_type = self.df_alive[self.df_alive["type"] == s_cell_type]
             if len(df_type) == 0:
                 continue
-            xi = ((df_type["x"].to_numpy() - self.x_min) / self.width  * n).astype(int).clip(0, n - 1)
-            yi = ((df_type["y"].to_numpy() - self.y_min) / self.height * n).astype(int).clip(0, n - 1)
+            xi = (
+                ((df_type["x"].to_numpy() - self.x_min) / self.width * n)
+                .astype(int)
+                .clip(0, n - 1)
+            )
+            yi = (
+                ((df_type["y"].to_numpy() - self.y_min) / self.height * n)
+                .astype(int)
+                .clip(0, n - 1)
+            )
             np.add.at(cell_grid[i_id], (xi, yi), 1.0)
         cell_grid /= total_cells  # normalise → each value in [0, 1]
 
         subs_grid = np.zeros((n_subs, n, n), dtype=np.float32)
-        counts    = np.zeros((n, n), dtype=np.float32)
+        counts = np.zeros((n, n), dtype=np.float32)
         for i, s_subs in enumerate(self.substrate_unique):
             microenv = np.asarray(physicell.get_microenv(s_subs))
-            x    = microenv[:, 0]
-            y    = microenv[:, 1]
+            x = microenv[:, 0]
+            y = microenv[:, 1]
             conc = microenv[:, -1]
-            xi = ((x - self.x_min) / self.width  * n).astype(int).clip(0, n - 1)
+            xi = ((x - self.x_min) / self.width * n).astype(int).clip(0, n - 1)
             yi = ((y - self.y_min) / self.height * n).astype(int).clip(0, n - 1)
             counts[:] = 0.0
             np.add.at(subs_grid[i], (xi, yi), conc)
-            np.add.at(counts,       (xi, yi), 1.0)
+            np.add.at(counts, (xi, yi), 1.0)
             mask = counts > 0
             subs_grid[i][mask] /= counts[mask]  # mean concentration per bin
         subs_grid = np.clip(subs_grid, 0.0, 1.0)
@@ -1090,7 +1301,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             self.observation_mode
             == f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
         ):
-            o_observation =self.get_matrix_cells()
+            o_observation = self.get_matrix_cells()
         elif (
             self.observation_mode
             == f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
@@ -1128,37 +1339,79 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 ]
             )
         elif self.observation_mode == "spatial_scalars_cells":
-            o_observation = np.concatenate([
-                self.get_cells_scalars(),
-                self.get_spatial_features(),
-            ])
+            o_observation = np.concatenate(
+                [
+                    self.get_cells_scalars(),
+                    self.get_spatial_features(),
+                ]
+            )
 
         elif self.observation_mode == "spatial_scalars_cells_substrates":
-            o_observation = np.concatenate([
-                self.get_cells_scalars(),
-                self.get_substrates_scalars(),
-                self.get_spatial_features(),
-            ])
-        
+            o_observation = np.concatenate(
+                [
+                    self.get_cells_scalars(),
+                    self.get_substrates_scalars(),
+                    self.get_spatial_features(),
+                ]
+            )
+
+        elif self.observation_mode == "spatial_scalars_cells_m1m2":
+            o_observation = np.concatenate(
+                [
+                    self.get_macrophage_polarization_scalars(),
+                    self.get_spatial_features_m1m2(),
+                ]
+            )
+
+        elif self.observation_mode == "spatial_scalars_cells_substrates_m1m2":
+            o_observation = np.concatenate(
+                [
+                    self.get_macrophage_polarization_scalars(),
+                    self.get_substrates_scalars(),
+                    self.get_spatial_features_m1m2(),
+                ]
+            )
+
+        elif (
+            self.observation_mode
+            == "spatial_scalars_cells_spatial_no_scalars_substrates_m1m2"
+        ):
+            o_observation = np.concatenate(
+                [
+                    self.get_macrophage_polarization_scalars(),
+                    self.get_spatial_features_m1m2(),
+                    self.get_spatial_substrate_features(),
+                ]
+            )
+
         elif self.observation_mode == "spatial_scalars_cells_spatial_substrates":
-            o_observation = np.concatenate([
-                self.get_cells_scalars(),
-                self.get_substrates_scalars(),
-                self.get_spatial_features(),
-                self.get_spatial_substrate_features(),
-            ])
-        elif self.observation_mode == "spatial_scalars_cells_spatial_no_scalars_substrates":
-            o_observation = np.concatenate([
-                self.get_cells_scalars(),
-                self.get_spatial_features(),
-                self.get_spatial_substrate_features(),
-            ])
-        
+            o_observation = np.concatenate(
+                [
+                    self.get_cells_scalars(),
+                    self.get_substrates_scalars(),
+                    self.get_spatial_features(),
+                    self.get_spatial_substrate_features(),
+                ]
+            )
+        elif (
+            self.observation_mode
+            == "spatial_scalars_cells_spatial_no_scalars_substrates"
+        ):
+            o_observation = np.concatenate(
+                [
+                    self.get_cells_scalars(),
+                    self.get_spatial_features(),
+                    self.get_spatial_substrate_features(),
+                ]
+            )
+
         elif self.observation_mode == f"kmeans_spatial_scalars_cells_substrates":
-            o_observation = np.concatenate([
-                self.get_spatial_features(),
-                self.get_spatial_substrate_features(),
-            ])
+            o_observation = np.concatenate(
+                [
+                    self.get_spatial_features(),
+                    self.get_spatial_substrate_features(),
+                ]
+            )
 
         elif self.observation_mode == "occupancy_grid":
             o_observation = self.get_occupancy_grid()
@@ -1167,10 +1420,12 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             o_observation = self.get_relational_features()
 
         elif self.observation_mode == "cross_nn_relational":
-            o_observation = np.concatenate([
-                self.get_relational_features(),
-                self.get_cross_nn_features(),
-            ])
+            o_observation = np.concatenate(
+                [
+                    self.get_relational_features(),
+                    self.get_cross_nn_features(),
+                ]
+            )
 
         else:
             raise ValueError(
@@ -1223,7 +1478,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             truncated (the episode reached the max time limit).
         """
         # model dependent terminated processing logic goes here!
-        return True if self.c_t <= 3 or self.c_t>256 else False
+        return True if self.c_t <= 3 or self.c_t > 256 else False
 
     def get_reset_values(self):
         """
@@ -1410,14 +1665,10 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         df_cell = df_cell[df_cell.z == 0.0]  # only z=0
 
         x_scaled = (
-            (df_cell["x"] - self.x_min)
-            / (self.width)
-            * (canvas_width - 100)
+            (df_cell["x"] - self.x_min) / (self.width) * (canvas_width - 100)
         ).astype(int)
         y_scaled = (
-            (df_cell["y"] - self.y_min)
-            / (self.height)
-            * (canvas_height - 20)
+            (df_cell["y"] - self.y_min) / (self.height) * (canvas_height - 20)
         ).astype(int)
 
         # Draw cells
