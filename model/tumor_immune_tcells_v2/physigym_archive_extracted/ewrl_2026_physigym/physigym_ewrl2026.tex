@@ -507,7 +507,10 @@ competitive  its training return ($+42.9$) matches the best image mode I2
 network-field, the three image modes retain ${\approx}{+}30$ to $+32$ test
 return, while S3s collapses to $-0.0$. Training fit alone would have ranked the
 scalar summary among the best; only the OOD test reveals that it has overfit the
-fixed strip geometry of the rectangle.
+fixed strip geometry of the rectangle. This separation is statistically
+supported: the image modes' $95\%$ bootstrap confidence intervals on the mean
+test return lie entirely above $+24$ and do not overlap those of any
+spatial-scalar mode, all of which contain zero (Appendix~\ref{app:bootstrap}).
 
 \paragraph{Spatially explicit observations transfer; scalar summaries do not.}
 All three image modes  \texttt{img\_mc\_cells} (I1, $+32.4$),
@@ -603,6 +606,12 @@ The toy model is intentionally small (64\,$\mu$m, 2D) and cheap to simulate.
 Scaling to 3D or larger domains will increase the cost of image observations.
 All experiments use a single RL algorithm (SAC); alternative algorithms or
 model-based methods may interact differently with observation spaces.
+Each mode is trained with a modest number of seeds ($n=5$--$7$), unevenly
+distributed across modes; we mitigate this with bootstrap confidence intervals
+(Appendix~\ref{app:bootstrap}) rather than relying on raw seed-standard-deviation,
+but the conclusions would be strengthened by more seeds and by testing transfer
+in both directions between layouts. We also study a single train/test layout
+pair (rectangle$\to$network-field); the reverse direction is left to future work.
 Complex biological models and/or 3D models are left to future work.
 
 % ─────────────────────────────────────────────────────────────────────────────
