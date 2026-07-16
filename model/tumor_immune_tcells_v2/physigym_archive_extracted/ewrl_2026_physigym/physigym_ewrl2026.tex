@@ -561,11 +561,14 @@ carry the M1/M2 split or spatially resolved substrate summaries  the common
 failure is the loss of per-cell spatial layout, which the $k$-means summaries do
 not preserve.
 
-Appendix~\ref{app:episodes} shows matched example episodes comparing an image
-mode against a spatial-scalar mode step by step, illustrating the failure mode
-that summarises the comparison: without a spatially explicit representation the
-agent cannot target the drug precisely enough to convert dose into effective
-macrophage repolarisation on an unseen layout.
+Appendix~\ref{app:episodes} shows a matched example episode comparing an image
+mode, a spatial-scalar mode, and the POMDP baseline rolled out from an identical
+network-field initial condition, illustrating the failure mode that summarises
+the comparison: without a spatially explicit representation the agent cannot
+target the drug precisely enough to convert dose into effective macrophage
+repolarisation on an unseen layout  the image mode reaches near-eradication
+($3$ tumor cells) while the scalar and POMDP modes leave $70$ and $130$ cells
+respectively.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Discussion}
@@ -960,49 +963,40 @@ than, random dosing}.
 \section{Example Episode Comparisons}
 \label{app:episodes}
 
-% TODO(regenerate): the two episode figures below (fig_episode_comparison{,_2})
-% and their per-run numbers are carried over from the earlier experiment set
-% (network-field training, run_000143/147). They must be regenerated from the
-% SAC_ASYNC_TME_NEW_HYP_REWARD rollouts (train=rectangle, test=network-field)
-% before submission; the captions' specific counts/returns are placeholders.
-Figures~\ref{fig:episode} and~\ref{fig:episode2} show two matched test
-episodes comparing an image mode (\Itwo{}), a cell-only image mode (\Ione{}),
-and a spatial-scalar mode (\Sthree{}) step by step.  All agents start from
-identical initial conditions; the only difference is the observation mode.
+Figure~\ref{fig:episode} shows a single matched test episode comparing an image
+mode (\Itwo{}), a spatial-scalar mode (\Sthree{}), and the POMDP baseline
+(\Sone{}) step by step. To guarantee an exact comparison, all three agents are
+rolled out (deterministically, using the policy mean action) from the
+\emph{identical} held-out network-field initial condition  the same
+$124$-tumor-cell layout replayed from file  so the only difference between the
+three trajectories is the observation mode.
+
+The episode cleanly separates the three regimes. \Itwo{} drives the tumor to
+near-eradication ($3$ cells remaining, $+223$ cumulative return); it spends the
+most drug ($4.5$ total dose) but places it precisely enough  visibly dosing in
+sustained, targeted bursts (Figure~\ref{fig:episode}, bottom)  to convert dose
+into effective macrophage repolarisation and tumor clearance. \Sthree{} achieves
+partial control ($70$ cells, $+30$ return, $2.8$ dose): it suppresses growth
+early but plateaus and cannot finish, lacking the spatial substrate feedback
+needed to target the final push. \Sone{} (POMDP) barely acts ($0.9$ total dose)
+and the tumor \emph{grows} past its starting size ($130$ cells, $-6.4$ return):
+seeing only macrophage-polarisation counts, it cannot localise where to inject,
+so it under-doses and fails  consistent with its aggregate performance at or
+below the random baseline.
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=\linewidth]{img/fig_episode_comparison.pdf}
-  \caption{\textbf{run\_000143, seed~64  near-eradication episode.}
-    Cumulative return (top), cumulative drug used (middle), per-step dose (bottom).
-    I2 reaches near-eradication (4 tumor cells remaining, $+175$ return, 35.4 total dose).
-    S3 achieves partial control (14 cells, $+106$ return, 31.1 total dose).
-    I1 fails entirely (112 cells, $-7.4$ return, 12.2 total dose).
-    Despite comparable total drug between I2 and S3, only I2 eradicates
-    the tumor: substrate maps allow precise placement that converts dose
-    into effective macrophage repolarisation.
-    I1 under-medicates throughout  without substrate feedback the agent
-    cannot evaluate whether injections were effective.}
+  \includegraphics[width=0.85\linewidth]{img/fig_episode_comparison.pdf}
+  \caption{\textbf{Matched network-field episode (identical initial condition,
+    $124$ tumor cells).} Cumulative return (top), cumulative dose (middle), and
+    per-step dose (bottom) for \Itwo{} (red), \Sthree{} (blue), and the
+    \Sone{} POMDP baseline (grey), all replayed from the same IC.
+    \Itwo{} reaches near-eradication ($3$ cells, $+223$ return, $4.5$ dose);
+    \Sthree{} achieves partial control ($70$ cells, $+30$ return, $2.8$ dose);
+    the POMDP baseline under-doses and the tumor grows ($130$ cells, $-6.4$
+    return, $0.9$ dose). Only the image mode spends drug precisely enough to
+    convert dose into eradication.}
   \label{fig:episode}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\linewidth]{img/fig_episode_comparison_2.pdf}
-  \caption{\textbf{run\_000147, seed~128  harder episode with tumor rebound.}
-    No agent reaches eradication.
-    I2: $+158$ return (6 tumor cells, 32.2 total dose).
-    S3: $+147$ return (9 cells, 18.9 total dose).
-    I1: $+61$ return (38 cells, 13.0 total dose).
-    All three agents build positive return through step~$\approx$330, then
-    the tumor rebounds; I2 best contains the rebound.
-    The two failure modes identified in run\_000143 persist: I1 under-medicates
-    (13.0 vs.\ 32.2 for I2), and S3 cannot sustain control without substrate
-    spatial feedback to track the evolving immunosuppressive gradient.
-    Contrasting the two episodes: the advantage of I2 is largest when
-    eradication is reachable; when the tumor is more resilient all modes
-    struggle, but I2 still maintains the best outcome.}
-  \label{fig:episode2}
 \end{figure}
 
 

@@ -46,7 +46,10 @@ def main():
         meta = MODES[m]
         axes[0].plot(d["step"], d["cum_reward"], color=meta["color"], lw=meta["lw"], label=meta["label"])
         axes[1].plot(d["step"], d["cum_dose"], color=meta["color"], lw=meta["lw"], label=meta["label"])
-        axes[2].plot(d["step"], d["action_dose"], color=meta["color"], lw=meta["lw"], alpha=0.85)
+        # per-step dose: light rolling mean so the panel reads cleanly
+        # (raw actions are jittery step-to-step; trend is what matters here)
+        dose_smooth = d["action_dose"].rolling(window=10, center=True, min_periods=1).mean()
+        axes[2].plot(d["step"], dose_smooth, color=meta["color"], lw=meta["lw"], alpha=0.9)
         summary.append((m, int(d["number_tumor"].iloc[-1]),
                         float(d["cum_reward"].iloc[-1]), float(d["cum_dose"].iloc[-1])))
 
@@ -54,7 +57,7 @@ def main():
     axes[0].axhline(0, color="k", lw=0.6, alpha=0.4)
     axes[0].legend(fontsize=8, loc="best")
     axes[1].set_ylabel("cumulative dose")
-    axes[2].set_ylabel("per-step dose")
+    axes[2].set_ylabel("per-step dose\n(rolling mean, w=10)")
     axes[2].set_xlabel("gym step")
     fig.suptitle("Matched network-field episode (identical IC, 124 tumor cells)", fontsize=11)
     fig.savefig(os.path.join(OUT, "fig_episode_comparison.pdf"))
