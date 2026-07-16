@@ -1,0 +1,1 @@
+[S3s seed1000] steps=480 final_tumor=70 cum_reward=30.0 cum_dose=2.8 -> /home/alex/PhysiGym/figures_plotting/episode_rollouts/S3s_seed1000.csv

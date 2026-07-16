@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/home/alex/PhysiGym/figures_plotting/eval_episode_rollout.py", line 106, in <module>
+    rollout(a.mode, a.ic_seed, a.out, a.max_steps, replay_ic=a.replay_ic)
+  File "/home/alex/PhysiGym/figures_plotting/eval_episode_rollout.py", line 64, in rollout
+    env, actor, cfg = build(mode, ic_seed, replay_ic=replay_ic)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alex/PhysiGym/figures_plotting/eval_episode_rollout.py", line 30, in build
+    ckpt = torch.load(CKPT[mode], map_location="cpu", weights_only=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alex/PhysiCell_vroom_vroom/.venv/lib/python3.11/site-packages/torch/serialization.py", line 1530, in load
+    with _open_file_like(f, "rb") as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alex/PhysiCell_vroom_vroom/.venv/lib/python3.11/site-packages/torch/serialization.py", line 795, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alex/PhysiCell_vroom_vroom/.venv/lib/python3.11/site-packages/torch/serialization.py", line 776, in __init__
+    super().__init__(open(name, mode))  # noqa: SIM115
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'data/best_hyperparameters_SAC_img_mc_cells_substrates_w_cell=0.3_w_dose=2.0_w_smooth=0.0_seed42_42_img_mc_cells_substrates_targeted_1784165317/checkpoints/sac_step00095000.pt'

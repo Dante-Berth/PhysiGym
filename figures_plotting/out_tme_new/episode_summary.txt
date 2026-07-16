@@ -1,0 +1,3 @@
+I2: final_tumor=3, cum_return=222.9, cum_dose=4.5
+S3s: final_tumor=70, cum_return=30.0, cum_dose=2.8
+POMDP: final_tumor=130, cum_return=-6.4, cum_dose=0.9
