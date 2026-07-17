@@ -125,8 +125,64 @@ Filenames the .tex expects: `train_return_mean50.pdf`, `test_return_mean50.pdf`,
   are no longer used.
 
 ## Known caveats / things a reviewer might poke
-- Seed count n=5–7, uneven across modes (acknowledged in Limitations; mitigated with bootstrap CIs).
+- Seed count target: **fixed to 5 seeds per mode** (2026-07-17 decision — see roadmap below;
+  was previously n=5–7, uneven across modes).
 - Single train/test direction (acknowledged).
 - Single RL algorithm (SAC) (acknowledged).
 - I2 checkpoint only trained to 60k steps (`sac_final.pt`); others to 95k. The matched-episode I2
   still near-eradicates, so this is fine, but note it if asked.
+
+---
+
+## ROADMAP — post-2026-07-17 revision push
+
+_Added 2026-07-17. Three substantial, mostly-independent workstreams. Ordered by dependency,
+not by priority — Stages 3 and 4 can start immediately in parallel with Stage 1._
+
+### Stage 0 — Checkpoint inventory (do first, fast)
+Audit `~/PhysiCell_vroom_vroom/data/best_hyperparameters_SAC_*/checkpoints/` against the
+**fixed target of 5 seeds per mode** (9 modes + RAND + POMDP baselines). Produce a concrete
+gap list: which (mode, seed) pairs are missing a checkpoint entirely, and which have a
+checkpoint but not to the target step count (95k, per the I2-at-60k caveat above).
+
+### Stage 1 — Fill missing checkpoints (blocking, slow)
+Train whatever (mode, seed) combinations Stage 0 finds missing, down to exactly 5 seeds/mode
+(drop extra seeds where a mode currently has 6–7, to keep the reported n consistent across
+the whole table). Long pole of this roadmap — real training wall-clock (~5h/run per the compute
+note above). Everything in Stage 2 benefits from full coverage but can start incrementally on
+whatever's already trained.
+
+### Stage 2 — Multi-seed video pipeline (train + test, per state space)
+For each (mode, seed): load the actor checkpoint → rollout with `generate_physicell_data=True`
+→ dump `frames.npz` (`wrapper.py:_dump_frames`) → render `video.mp4` via `video_maker.py`.
+Needs both train-mode (rectangle) and test-mode (network-field) rollouts per checkpoint.
+Depends on Stage 1 for full 5-seed coverage; can start now on already-trained checkpoints.
+
+### Stage 3 — Why do scalar modes overfit but image modes don't? (can start now)
+**Empirical diagnosis**, not just a written hypothesis — dig into data already logged before
+running anything new:
+- Use the existing Q-value calibration data (`wrapper.py`'s `q_calibration_data` on test
+  episodes) to compare train vs. test critic behavior for S3s/S3m/S3sm vs. I1/I2/I2m.
+- Check whether scalar-mode features encode absolute position/counts that don't transfer
+  across rectangle → network-field geometry, vs. image-mode conv filters that should be closer
+  to translation-invariant.
+- Candidate output: a Discussion-section paragraph backed by concrete evidence (not just
+  architectural intuition), plus maybe one supporting figure/table if the diagnosis turns up
+  something plottable (e.g. a feature-attribution or train/test critic-value gap comparison).
+
+### Stage 4 — Macrophage-aware heuristic baseline (can start now, independent)
+Implement a new **rule-based baseline** (not RL) to add alongside RAND/POMDP in Table 1 and
+the episode-comparison figure:
+- Rule: locate macrophages within some radius of tumor cells ("tumor-adjacent macrophages"),
+  center the drug injection there instead of at a learned/random location.
+- Needs: a distance threshold definition, and a policy that plugs into the existing
+  `PhysiCellModelWrapper` action interface (`drug_1_dose`, `drug_1_x`, `drug_1_y`,
+  `drug_1_radius`) without going through an SAC actor.
+- Evaluate identically to RAND/POMDP (5 seeds, same test-mode network-field episodes) so it's
+  directly comparable in Table 1 / bootstrap CIs.
+
+### Stage 5 — Paper integration (last)
+- Fold Stage 3's empirical findings into Discussion.
+- Add Stage 4's heuristic baseline row to Table 1 (main + bootstrap) and, if illustrative,
+  the episode-comparison figure.
+- Regenerate any figures/captions touched by the above; recompile and spot-check.

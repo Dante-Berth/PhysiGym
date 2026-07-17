@@ -988,9 +988,11 @@ below the random baseline.
   \centering
   \includegraphics[width=0.85\linewidth]{img/fig_episode_comparison.pdf}
   \caption{\textbf{Matched network-field episode (identical initial condition,
-    $124$ tumor cells).} Tumor cell count (top) and the raw per-step dose
-    action (bottom) for \Itwo{} (red), \Sthree{} (blue), and the
-    \Sone{} POMDP baseline (grey), all replayed from the same IC.
+    $124$ tumor cells).} Cumulative reward (top), tumor cell count (middle),
+    and the dose action (bottom, rolling mean over $6$ steps  matching the
+    action-repeat horizon used in training; the raw per-step signal is noisy
+    and unreadable at full resolution) for \Itwo{} (red), \Sthree{} (blue),
+    and the \Sone{} POMDP baseline (grey), all replayed from the same IC.
     \Itwo{} reaches near-eradication ($3$ cells, $+223$ return, $4.5$ dose);
     \Sthree{} achieves partial control ($70$ cells, $+30$ return, $2.8$ dose);
     the POMDP baseline under-doses and the tumor grows ($130$ cells, $-6.4$
