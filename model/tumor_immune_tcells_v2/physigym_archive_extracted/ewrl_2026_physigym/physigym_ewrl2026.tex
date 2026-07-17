@@ -988,14 +988,19 @@ below the random baseline.
   \centering
   \includegraphics[width=0.85\linewidth]{img/fig_episode_comparison.pdf}
   \caption{\textbf{Matched network-field episode (identical initial condition,
-    $124$ tumor cells).} Cumulative return (top), cumulative dose (middle), and
-    per-step dose (bottom) for \Itwo{} (red), \Sthree{} (blue), and the
+    $124$ tumor cells).} Tumor cell count (top) and the raw per-step dose
+    action (bottom) for \Itwo{} (red), \Sthree{} (blue), and the
     \Sone{} POMDP baseline (grey), all replayed from the same IC.
     \Itwo{} reaches near-eradication ($3$ cells, $+223$ return, $4.5$ dose);
     \Sthree{} achieves partial control ($70$ cells, $+30$ return, $2.8$ dose);
     the POMDP baseline under-doses and the tumor grows ($130$ cells, $-6.4$
-    return, $0.9$ dose). Only the image mode spends drug precisely enough to
-    convert dose into eradication.}
+    return, $0.9$ dose). Only the image mode sustains a high, decisive dose
+    action long enough to drive the tumor to near-eradication, whereas
+    \Sthree{} oscillates and eventually lets the tumor regrow.
+    Note that the physical dose delivered to the simulation each step is the
+    concentration action (bottom) multiplied by the voxel volume swept by the
+    independently-controlled injection radius action, so the dose action
+    alone does not linearly predict the physical dose spent.}
   \label{fig:episode}
 \end{figure}
 

@@ -1,7 +1,7 @@
 """Build the episode-comparison figure from replay rollouts on a shared IC.
 
-Reads {I2,S3s,POMDP}_replay.csv from episode_rollouts/ and produces a 3-panel
-figure (cumulative return, cumulative dose, per-step dose) mirroring the paper's
+Reads {I2,S3s,POMDP}_replay.csv from episode_rollouts/ and produces a 2-panel
+figure (tumor cell count, treatment action) mirroring the paper's
 fig_episode_comparison. All three ran the SAME network-field initial condition
 (ic_episode_A.csv, 124 tumor cells) so only the observation mode differs.
 """
@@ -40,25 +40,19 @@ def main():
 
     plt.rcParams.update({"font.size": 11, "axes.grid": True, "grid.alpha": 0.25,
                          "savefig.dpi": 300, "savefig.bbox": "tight"})
-    fig, axes = plt.subplots(3, 1, figsize=(7, 8.5), sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=(7, 6.2), sharex=True)
     summary = []
     for m, d in dfs.items():
         meta = MODES[m]
-        axes[0].plot(d["step"], d["cum_reward"], color=meta["color"], lw=meta["lw"], label=meta["label"])
-        axes[1].plot(d["step"], d["cum_dose"], color=meta["color"], lw=meta["lw"], label=meta["label"])
-        # per-step dose: light rolling mean so the panel reads cleanly
-        # (raw actions are jittery step-to-step; trend is what matters here)
-        dose_smooth = d["action_dose"].rolling(window=10, center=True, min_periods=1).mean()
-        axes[2].plot(d["step"], dose_smooth, color=meta["color"], lw=meta["lw"], alpha=0.9)
+        axes[0].plot(d["step"], d["number_tumor"], color=meta["color"], lw=meta["lw"], label=meta["label"])
+        axes[1].step(d["step"], d["action_dose"], where="post", color=meta["color"], lw=meta["lw"], alpha=0.9)
         summary.append((m, int(d["number_tumor"].iloc[-1]),
                         float(d["cum_reward"].iloc[-1]), float(d["cum_dose"].iloc[-1])))
 
-    axes[0].set_ylabel("cumulative return")
-    axes[0].axhline(0, color="k", lw=0.6, alpha=0.4)
+    axes[0].set_ylabel("tumor cell count")
     axes[0].legend(fontsize=8, loc="best")
-    axes[1].set_ylabel("cumulative dose")
-    axes[2].set_ylabel("per-step dose\n(rolling mean, w=10)")
-    axes[2].set_xlabel("gym step")
+    axes[1].set_ylabel("treatment action\n(dose, normalised)")
+    axes[1].set_xlabel("gym step")
     fig.suptitle("Matched network-field episode (identical IC, 124 tumor cells)", fontsize=11)
     fig.savefig(os.path.join(OUT, "fig_episode_comparison.pdf"))
     plt.close(fig)

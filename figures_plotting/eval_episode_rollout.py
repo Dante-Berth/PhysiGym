@@ -50,7 +50,11 @@ def build(mode, ic_seed, replay_ic=None):
     # force: single env, all-test network-field episodes, no wandb, minimal sim
     cfg["vectorization"]["num_envs"] = 1
     cfg["vectorization"]["rl_threads"] = 1
-    cfg["vectorization"]["threads_per_env"] = 4
+    # single-threaded: PhysiCell's mechanics/motility loops draw from a shared
+    # UniformRandom() stream inside OpenMP-parallel loops, so with >1 thread the
+    # draw order (and therefore the whole trajectory) is scheduler-dependent and
+    # NOT reproducible run-to-run even with a fixed seed + fixed IC.
+    cfg["vectorization"]["threads_per_env"] = 1
     cfg["simulation"]["wandb_track"] = False
     cfg["model"]["render_mode"] = None
     cfg["generation"]["mode_test"] = ["network_field"]
@@ -60,16 +64,14 @@ def build(mode, ic_seed, replay_ic=None):
     tag = f"{mode}_{ic_seed}" if replay_ic is None else f"{mode}_replay"
     cfg["model"]["output_dir"] = os.path.join("data", "_eval_tmp", tag)
 
-    # replay mode: force an identical initial condition across modes
+    # replay mode: force an identical initial condition across modes.
+    # NOTE: do NOT reset() here — init_fn() already performs the env's first
+    # reset internally, and rollout() below does the real replay reset right
+    # before stepping. An extra reset() here previously double-reset the env,
+    # which perturbed PhysiCell's shared RNG stream and made rollouts
+    # non-reproducible even with a fixed seed + fixed IC.
     init_fn = make_physigym_env(0, cfg)
-    if replay_ic is not None:
-        import types
-        env = init_fn()
-        # re-reset in replay mode with the fixed IC file
-        env.reset(no_generation_cfg={"list_csv": [os.path.abspath(replay_ic)],
-                                     "dataset": "replay"})
-    else:
-        env = init_fn()
+    env = init_fn()
 
     actor = Actor(ckpt["d_arg_env"], cfg["neural_architecture_image"])
     actor.load_state_dict(ckpt["actor"])
@@ -99,7 +101,10 @@ def rollout(mode, ic_seed, out_dir, max_steps=672, replay_ic=None):
                          reward=float(r), cum_reward=cum_r,
                          dose=float(info.get("dose_spent", 0.0)), cum_dose=cum_dose,
                          number_tumor=int(info.get("number_tumor", -1)),
-                         action_dose=float(act[0])))
+                         action_dose=float(act[0]),
+                         action_x=float(act[1]) if len(act) > 1 else 0.0,
+                         action_y=float(act[2]) if len(act) > 2 else 0.0,
+                         action_radius=float(act[3]) if len(act) > 3 else 0.0))
         if term or trunc:
             break
     fn = os.path.join(out_dir, f"{mode}_seed{ic_seed}.csv")
