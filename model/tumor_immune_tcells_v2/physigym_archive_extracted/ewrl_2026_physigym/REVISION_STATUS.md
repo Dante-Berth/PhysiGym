@@ -145,6 +145,46 @@ Audit `~/PhysiCell_vroom_vroom/data/best_hyperparameters_SAC_*/checkpoints/` aga
 gap list: which (mode, seed) pairs are missing a checkpoint entirely, and which have a
 checkpoint but not to the target step count (95k, per the I2-at-60k caveat above).
 
+**Partial inventory done 2026-07-17 (interrupted, needs finishing next session):**
+
+There are two separate things that were being conflated — re-check both, they have different
+gaps:
+
+1. **wandb training-curve history** (`~/PhysiGym/figures_plotting/wandb_tme_new/<mode>/*.csv`)
+   — this is what Table 1 / the return-curve figures are already built from, and is NOT the
+   same as having local checkpoint `.pt` files. Seed-run counts found so far:
+   - `img_mc_cells_substrates_m1m2` (I2m): 5 — OK
+   - `scalars_macrophages` (POMDP): 5 — OK
+   - `spatial_scalars_cells_spatial_no_scalars_substrates_m1m2` (S5m): 5 — OK
+   - `spatial_scalars_cells_substrates` (S3s): 5 — OK
+   - `spatial_scalars_cells_substrates_m1m2` (S3sm): 5 — OK
+   - `img_mc_cells` (I1): 6 — has 1 extra, trim to 5 for consistency
+   - `img_mc_cells_m1m2` (I1m): 6 — has 1 extra, trim to 5
+   - `spatial_scalars_cells_m1m2` (S3m): 11 — has 6 extra, trim to 5
+   - `img_mc_cells_substrates` (I2): 11 — has 6 extra, trim to 5
+   - RAND baseline: 5 seeds already (per existing notes above) — OK
+   - **Which specific seeds to drop when trimming (e.g. lowest-quality run vs. just first-5-by-seed-id)
+     was NOT decided — needs a call next session.**
+
+2. **Local checkpoint `.pt` files** (`~/PhysiCell_vroom_vroom/data/best_hyperparameters_SAC_*/checkpoints/`)
+   — needed for Stage 2 (video rendering) and Stage 4 (baseline comparison replay), NOT covered
+   by wandb curves alone. This machine (`PhysiCell_vroom_vroom`, i.e. NOT PhysiGym) is missing
+   most of them:
+   - `img_mc_cells_m1m2` (I1m): only found at step 5000 (essentially untrained) — **effectively missing**
+   - `img_mc_cells` (I1): only 1 seed dir found (seed42), max step 55000 (target 95000) — **incomplete**
+   - `img_mc_cells_substrates` (I2): 2 seed dirs found (seed1 @ 55k, seed42 @ 60k) — **incomplete,
+     both under the 95k target; this is the "I2 only trained to 60k" caveat already noted above**
+   - `img_mc_cells_substrates_m1m2` (I2m): **not found in the local data/ listing at all** — check
+     if it's under a different naming pattern, or genuinely absent locally
+   - `scalars_macrophages` (POMDP): 1 seed dir (seed42) @ 95000 — OK but only 1 seed locally
+     (wandb has 5 — the other 4 seeds' checkpoints may not be saved locally)
+   - `spatial_scalars_cells_*` (S3s/S3m/S3sm/S5m): these look the most complete locally — S3m and
+     S3sm have 5 seed dirs each @ 95000, S5m has 5 @ 95000, S3s has 5 @ 95000
+   - **Open question**: are the missing local checkpoints (esp. all the image modes) recoverable
+     from another machine/backup, or were they deleted after the wandb curves were logged and
+     genuinely need re-training? Check before assuming Stage 1 needs a full retrain — this is
+     the single biggest unknown blocking the roadmap's time estimate.
+
 ### Stage 1 — Fill missing checkpoints (blocking, slow)
 Train whatever (mode, seed) combinations Stage 0 finds missing, down to exactly 5 seeds/mode
 (drop extra seeds where a mode currently has 6–7, to keep the reported n consistent across
