@@ -9,3 +9,13 @@ dist
 empty.txt
 PhysiCell_settings-backup.xml
 studio_debug.log
+
+# LaTeX build artifacts (paper source + compiled PDF are tracked, intermediates are not)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz

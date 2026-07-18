@@ -1,6 +1,6 @@
 # EWRL-2026 PhysiGym paper — revision status & next-session roadmap
 
-_Last updated: 2026-07-16. This is a handoff doc so work isn't lost between sessions._
+_Last updated: 2026-07-18. This is a handoff doc so work isn't lost between sessions._
 
 **Paper:** `physigym_ewrl2026.tex` (this directory)
 **OpenReview:** https://openreview.net/forum?id=p5INPBXPKX (gated — reviews not machine-readable; paste them in if you want them addressed)
@@ -15,8 +15,14 @@ The paper was revised from the old **6-mode** study to the new **9-mode** experi
 captions, hyperparameters, abstract, discussion, and conclusion were updated to match.
 **No TODOs/placeholders remain in the .tex; all envs balance and all `\ref`s resolve.**
 
-The paper is **submission-ready modulo two things**: (1) it has **not been compiled**
-(no LaTeX toolchain on this machine), (2) `ic_distributions.pdf` is **stale** (see below).
+**Update 2026-07-18: both blockers resolved.** (1) LaTeX toolchain now installed;
+`latexmk -pdf physigym_ewrl2026.tex` compiles cleanly to a 17-page PDF (warnings only,
+no errors). (2) `ic_distributions.pdf`/`.png` regenerated as a **2-panel** figure
+(rectangle=train, network-field=test; circular dropped) via
+`~/PhysiGym/figures_plotting/plot_initial_conditions.py`, pointed at the current
+`~/PhysiCell_vroom_vroom/data/best_hyperparameters_SAC_img_mc_cells_substrates_..._seed42_.../`
+run (the old `TME_V2_32_img_mc_cells_1779954610` path no longer exists on disk).
+The paper is now submission-ready in its current 9-mode-study form.
 
 ---
 
@@ -99,14 +105,9 @@ Filenames the .tex expects: `train_return_mean50.pdf`, `test_return_mean50.pdf`,
 
 ## NEXT SESSION — prioritized TODO
 
-1. **Compile the paper.** No LaTeX toolchain here. Run `latexmk -pdf physigym_ewrl2026.tex`
-   (or `pdflatex` ×2 + `bibtex`). Fix any typesetting issues. **Do this first** — everything
-   else is moot if it doesn't build.
-2. **`ic_distributions.pdf`** — the figure FILE is stale (Jun 17, still shows old circular
-   layout), but circular is no longer part of the study. Only matters if this figure renders
-   in the compiled PDF: if so, regenerate to show rectangle + network-field via
-   `~/PhysiGym/figures_plotting/plot_initial_conditions.py`. Otherwise ignore.
-   (User decision 2026-07-16: circular no longer needed; paper considered done.)
+1. ~~**Compile the paper.**~~ **DONE 2026-07-18** — compiles cleanly, 17 pages.
+2. ~~**`ic_distributions.pdf`**~~ **DONE 2026-07-18** — regenerated as 2-panel
+   (rectangle/network-field), circular dropped.
 3. **(Optional) A second matched episode** — a "harder / rebound" case to complement the
    near-eradication one, mirroring the old paper's two-figure structure. Pick another IC from
    I2's saved test episodes (script: scan `*/test/episodes/run_*/data.csv` for a mid-range

@@ -1,20 +1,20 @@
 """
 plot_initial_conditions.py
 ──────────────────────────
-Generates a 3-panel figure showing the three spatial distributions used
-in the EWRL 2026 experiments, built directly from real IC CSVs.
+Generates a 2-panel figure showing the two spatial distributions used
+in the EWRL 2026 experiments (train = rectangle, test = network-field),
+built directly from real IC CSVs. Circular layout dropped (2026-07-16
+decision: no longer part of the study).
 
-Exact source files:
-  network-field (training):
-    PhysiCell/data/TME_V2_32_img_mc_cells_1779954610/env0/train/episodes/run_000013/ic_000013.csv
-  rectangle (test / OOD):
-    PhysiCell/data/TME_V2_32_img_mc_cells_1779954610/env0/test/episodes/run_000004/ic_000004.csv
-  circular (test / OOD):
-    PhysiCell/data/TME_V2_32_img_mc_cells_1779954610/env0/test/episodes/run_000008/ic_000008.csv
+Exact source files (img_mc_cells_substrates seed42 run):
+  rectangle (training):
+    data/best_hyperparameters_SAC_img_mc_cells_substrates_w_cell=0.3_w_dose=2.0_w_smooth=0.0_seed42_42_img_mc_cells_substrates_targeted_1784165317/env0/train/episodes/run_000001/ic_000001.csv
+  network-field (test / OOD):
+    data/best_hyperparameters_SAC_img_mc_cells_substrates_w_cell=0.3_w_dose=2.0_w_smooth=0.0_seed42_42_img_mc_cells_substrates_targeted_1784165317/env0/test/episodes/run_000004/ic_000004.csv
 
 Usage:
     python plot_initial_conditions.py \
-        --data_dir PhysiCell/data \
+        --data_dir ~/PhysiCell_vroom_vroom/data \
         --out_dir  PhysiGym/paper/ewrl_2026_physigym/img
 """
 
@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 SCRIPT_DIR   = Path(__file__).resolve().parent
-DEFAULT_DATA = SCRIPT_DIR.parent.parent / "PhysiCell" / "data"
+DEFAULT_DATA = Path("/home/alex/PhysiCell_vroom_vroom/data")
 DEFAULT_OUT  = SCRIPT_DIR.parent / "paper" / "ewrl_2026_physigym" / "img"
 
 # ── cell colours ──────────────────────────────────────────────────────────────
@@ -37,19 +37,20 @@ COLORS = {"tumor": "#555555", "t_cell": "#e63946", "macrophage": "#2171b5"}
 LABELS = {"tumor": "Tumor", "t_cell": "T-cell", "macrophage": "Macrophage"}
 MARKER_SIZE = 18   # pt²
 
+_RUN_DIR = (
+    "best_hyperparameters_SAC_img_mc_cells_substrates_w_cell=0.3_w_dose=2.0_"
+    "w_smooth=0.0_seed42_42_img_mc_cells_substrates_targeted_1784165317"
+)
+
 # ── exact IC CSV paths relative to data_dir ───────────────────────────────────
 IC_SPECS = {
-    "network_field": {
-        "title": "Network-field\n(training distribution)",
-        "csv":   "TME_V2_32_img_mc_cells_1779954610/env0/train/episodes/run_000013/ic_000013.csv",
-    },
     "rectangle": {
-        "title": "Rectangle\n(test, out-of-distribution)",
-        "csv":   "TME_V2_32_img_mc_cells_1779954610/env0/test/episodes/run_000004/ic_000004.csv",
+        "title": "Rectangle\n(training distribution)",
+        "csv":   f"{_RUN_DIR}/env0/train/episodes/run_000001/ic_000001.csv",
     },
-    "circular": {
-        "title": "Circular\n(test, out-of-distribution)",
-        "csv":   "TME_V2_32_img_mc_cells_1779954610/env0/test/episodes/run_000008/ic_000008.csv",
+    "network_field": {
+        "title": "Network-field\n(test, out-of-distribution)",
+        "csv":   f"{_RUN_DIR}/env0/test/episodes/run_000004/ic_000004.csv",
     },
 }
 
@@ -96,7 +97,7 @@ def main():
         "figure.dpi": 150, "savefig.dpi": 300, "savefig.bbox": "tight",
     })
 
-    fig, axes = plt.subplots(1, 3, figsize=(9.5, 3.4))
+    fig, axes = plt.subplots(1, 2, figsize=(6.4, 3.4))
 
     for ax, (layout_key, spec) in zip(axes, IC_SPECS.items()):
         csv_path = data_dir / spec["csv"]
