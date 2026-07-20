@@ -1,6 +1,41 @@
 # EWRL-2026 PhysiGym paper — revision status & next-session roadmap
 
-_Last updated: 2026-07-18. This is a handoff doc so work isn't lost between sessions._
+_Last updated: 2026-07-20. This is a handoff doc so work isn't lost between sessions._
+
+---
+
+## ⚠️ 2026-07-20 — DATA LOSS EVENT + Stage 3 done. READ THIS FIRST.
+
+**A `video_maker.py` run over all of `data/` with cleanup enabled deleted, irreversibly:**
+- **ALL `.pt` checkpoints** (every mode, every seed — `find data -name '*.pt'` → 0). No backup
+  found on this machine. `video_maker.py`'s final sweep keeps only `{.mp4,.csv,.npz}`, so it
+  wipes `.pt`. **Stages 1 and 4 recovery now require RETRAINING (~5h/run)** unless the
+  checkpoints exist on another machine or as W&B model artifacts — CHECK W&B ARTIFACTS FIRST.
+- **ALL SAC-mode `frames.npz`** (consumed into videos). Only RANDOM-baseline `.npz` remain.
+  Not bit-reproducible (see CLAUDE.md), so gone for good.
+
+**What SURVIVED and is fully intact (nothing on the paper's critical path was lost):**
+- **10,180 `video.mp4`** — Stage 2's actual deliverable. Effectively DONE.
+- **W&B curves** (`figures_plotting/wandb_tme_new/`, all 9 modes + baseline) → Table 1,
+  bootstrap CIs, return curves all regenerable.
+- **`episode_rollouts/*.csv`** → matched-episode figure source intact.
+- **~48k `data.csv` traces + ~50k `ic_*.csv`** → per-episode behavioural record intact.
+  This is what made Stage 3 possible without checkpoints.
+
+**Stage 3 (why scalars overfit) — DONE 2026-07-20, integrated into the paper.**
+Used surviving `data.csv`+`ic_*.csv` only (the checkpoint-based Q-calibration route was dead).
+Measured injection↔tumour-centroid aiming distance, train vs test, image vs scalar. Result:
+on train all modes aim equally (~0.34–0.36); on OOD test image modes hold aim (I2 0.359→0.343)
+while every scalar mode degrades (S3s 0.341→0.414) with ~2× variance → overfit is a
+**drug-aiming failure**, not lost dosing ability. Added a Discussion paragraph +
+`img/fig_aiming_transfer.pdf` (Fig `fig:aiming_transfer`). **Paper recompiles clean, 18 pages,
+0 undefined refs.** Analysis scripts: scratchpad `stage3_transfer.py` / `stage3_figure.py`
+(reproduce from `data/` in ~15s; copy into `figures_plotting/` if you want them versioned).
+
+**Stage 0 inventory below is STALE** (pre-deletion, and was already too pessimistic about
+image checkpoints existing). Do not trust its checkpoint counts.
+
+---
 
 **Paper:** `physigym_ewrl2026.tex` (this directory)
 **OpenReview:** https://openreview.net/forum?id=p5INPBXPKX (gated — reviews not machine-readable; paste them in if you want them addressed)

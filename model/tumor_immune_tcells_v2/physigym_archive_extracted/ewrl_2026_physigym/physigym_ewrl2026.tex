@@ -597,6 +597,40 @@ available, preserving the substrate fields (I2) or pre-computing the M1/M2 split
 this toy model, though the full-information mode gives the single best test
 return.
 
+\paragraph{The overfit is a drug-aiming failure, measurable in the actions.}
+The claim above is not merely architectural: it is visible directly in the
+policies' behaviour. For every logged episode we compute the mean distance
+between the drug-injection centre (\texttt{action\_x}, \texttt{action\_y}) and
+the tumour centroid (from the episode initial conditions), averaged over the
+steps on which a dose is actually applied, and compare this aiming error between
+the training rectangle and the held-out network-field
+(Fig.~\ref{fig:aiming_transfer}). On the training layout all six modes aim
+equally well (mean normalised error ${\approx}0.34$--$0.36$ for both families).
+Under the geometry shift, image modes hold their aim or slightly improve it
+(I2: $0.359\!\to\!0.343$; I2m: $0.352\!\to\!0.333$), whereas every scalar mode's
+aim \emph{degrades} (S3s: $0.341\!\to\!0.414$; S3m: $0.348\!\to\!0.406$) and its
+step-to-step variance roughly doubles. In other words, the scalar policies learn
+\emph{where} the rectangle tumour tends to sit rather than \emph{how to find} the
+tumour, so when the network-field moves it they inject into empty tissue; the
+median final tumour count on test rises accordingly (image ${\approx}73$--$99$
+vs.\ scalar $107$--$136$). This is the concrete mechanism behind the aggregate
+return gap: the generalisation failure is an aiming failure induced by
+position-absolute features.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{img/fig_aiming_transfer}
+  \caption{Drug-aiming alignment under geometry shift. Bars show the mean
+    normalised distance between the drug-injection centre and the tumour
+    centroid over dosed steps (lower is better aiming); error bars are the
+    across-episode standard deviation. On the training rectangle (blue) image
+    and scalar observations aim equally well. On the held-out network-field
+    (red) image modes retain their aim while every scalar mode degrades with
+    markedly higher variance, exposing the overfit as a failure to re-target the
+    tumour rather than a loss of dosing ability.}
+  \label{fig:aiming_transfer}
+\end{figure}
+
 We emphasise that this is an application-level observation on a deliberately
 simplified model, not a universal claim about biological control. In more
 complex or realistic models  or with different reward designs, action spaces,
