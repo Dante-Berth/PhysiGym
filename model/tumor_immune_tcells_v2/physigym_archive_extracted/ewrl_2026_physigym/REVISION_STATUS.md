@@ -32,6 +32,31 @@ while every scalar mode degrades (S3s 0.341→0.414) with ~2× variance → over
 0 undefined refs.** Analysis scripts: scratchpad `stage3_transfer.py` / `stage3_figure.py`
 (reproduce from `data/` in ~15s; copy into `figures_plotting/` if you want them versioned).
 
+**Stage 4 (macrophage-aware heuristic baseline) — CODE DONE 2026-07-20; EVAL LAUNCHED.**
+_2026-07-20: launched on **sureli 11** via `run_heuristic.sh` (Phase A radius sweep running).
+Next: pick BEST_RADIUS from Phase A test_return, enable Phase B (5-seed eval), then Stage 5._
+Rule-based, no checkpoint needed (needs only fresh rollouts). Mechanism-grounded: `cell_rules.csv`
+shows drug_1 re-polarises macrophages (↓pro_tumoral / ↑anti_tumoral secretion), so the policy
+injects a fixed dose (0.5) at the centroid of the **M2 macrophages within R µm of any tumour
+cell**, radius sized to their spread; dose 0 when no such macrophage exists. Smoke-tested
+end-to-end (withholds dose until M2-adjacent macrophages appear, then tracks the cluster;
+per-env ground-truth via `env_method`).
+
+- **Source-of-truth note:** the model method lives in the canonical PhysiGym source
+  `model/tumor_immune_tcells_v2/custom_modules/physigym/physicell_model.py`; the vroom copy
+  (`~/PhysiCell_vroom_vroom/custom_modules/physigym/physigym/envs/physicell_model.py`) is
+  kept **byte-identical**. `run.py` + `run_heuristic.sh` live **only in vroom**.
+- New code: `get_heuristic_action(radius, dose)` (both model copies); `run_heuristic_policy` +
+  `--mode heuristic` + `--heuristic_radius`/`--heuristic_dose` in vroom `run.py`;
+  `~/PhysiCell_vroom_vroom/run_heuristic.sh` (Phase A radius-tune {5,10,20}µm × 1 seed →
+  Phase B 5-seed eval at BEST_RADIUS, named `best_hyperparameters_HEURISTIC_baseline_...`).
+- **TODO to finish Stage 4→5:** run `run_heuristic.sh` Phase A, pick R by test_return, run
+  Phase B; download `HEURISTIC_*` wandb curves into a `heuristic_baseline/` group; add a parse
+  branch to `plot_tme_new.py`/`plot_tme_bootstrap.py` (mirror `random_baseline`); add the row to
+  Table 1 + bootstrap CIs (+ optionally the episode figure).
+- **Not committed yet** (2026-07-20): PhysiGym model change + vroom's 3 files are staged for the
+  user to commit/push. The 27 pre-existing `config/*.xml` in vroom stay untouched.
+
 **Stage 0 inventory below is STALE** (pre-deletion, and was already too pessimistic about
 image checkpoints existing). Do not trust its checkpoint counts.
 
@@ -246,16 +271,18 @@ running anything new:
   architectural intuition), plus maybe one supporting figure/table if the diagnosis turns up
   something plottable (e.g. a feature-attribution or train/test critic-value gap comparison).
 
-### Stage 4 — Macrophage-aware heuristic baseline (can start now, independent)
-Implement a new **rule-based baseline** (not RL) to add alongside RAND/POMDP in Table 1 and
-the episode-comparison figure:
-- Rule: locate macrophages within some radius of tumor cells ("tumor-adjacent macrophages"),
-  center the drug injection there instead of at a learned/random location.
-- Needs: a distance threshold definition, and a policy that plugs into the existing
-  `PhysiCellModelWrapper` action interface (`drug_1_dose`, `drug_1_x`, `drug_1_y`,
-  `drug_1_radius`) without going through an SAC actor.
-- Evaluate identically to RAND/POMDP (5 seeds, same test-mode network-field episodes) so it's
-  directly comparable in Table 1 / bootstrap CIs.
+### Stage 4 — Macrophage-aware heuristic baseline — CODE DONE 2026-07-20, EVAL PENDING
+Rule-based baseline (not RL) to add alongside RAND/POMDP in Table 1 and the episode figure.
+See the full status block at the top of this file; summary here:
+- **Implemented** as `get_heuristic_action(radius, dose)` on the model (PhysiGym canonical
+  source + byte-identical vroom copy) + `run_heuristic_policy`/`--mode heuristic` in vroom
+  `run.py` + `run_heuristic.sh`. Refined from the roadmap's original wording: targets
+  **M2** (pro-tumoral) tumour-adjacent macrophages specifically, because `cell_rules.csv`
+  makes drug_1 act on macrophage polarisation — so those are the mechanistically correct
+  target. Fixed dose 0.5 when a target exists, else 0.
+- **Still to do:** run `run_heuristic.sh` (Phase A radius tuning → Phase B 5-seed eval),
+  evaluate identically to RAND/POMDP on the network-field test set, so it drops into Table 1
+  / bootstrap CIs. This needs fresh rollouts (sim time), no checkpoints.
 
 ### Stage 5 — Paper integration (last)
 - Fold Stage 3's empirical findings into Discussion.

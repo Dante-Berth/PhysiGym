@@ -553,6 +553,67 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         return np.array(features, dtype=np.float32)
 
+    def get_heuristic_action(self, radius_micron=10.0, dose=0.5):
+        """
+        Macrophage-aware rule-based baseline action (Stage 4).
+
+        Mechanism-driven: cell_rules.csv makes drug_1 re-polarise macrophages
+        (decreases pro_tumoral / increases anti_tumoral secretion), so the drug's
+        leverage point is the M2 (pro-tumoral) macrophages that are feeding the
+        tumour, not the tumour cells themselves. This policy therefore aims a
+        fixed dose at the centroid of the M2 macrophages lying within
+        `radius_micron` of any tumour cell, sizing the injection radius to that
+        cluster's spread. If no such macrophage exists this step it injects
+        nothing (dose = 0), so it neither wastes drug nor pays the dose penalty.
+
+        Returns the NORMALISED [dose, x, y, radius] action in the same 0..1
+        convention the wrapper expects (it denormalises x/y by x_min+ x*width and
+        maps radius into [0.05, 0.20]*max_radius). This is a drop-in replacement
+        for action_space.sample() and needs no learning.
+        """
+        no_op = np.zeros(4, dtype=np.float32)  # dose=0; x/y/radius irrelevant when dose=0
+
+        df = self.df_alive
+        df_mac = df[df["type"] == "macrophage"]
+        df_tum = df[df["type"] == "tumor"]
+        if len(df_mac) == 0 or len(df_tum) == 0:
+            return no_op
+
+        mac_xy = df_mac[["x", "y"]].to_numpy()
+        tum_xy = df_tum[["x", "y"]].to_numpy()
+
+        # ── classify macrophages M1/M2 (same rule as the env's scalars) ──────
+        pro = np.asarray(physicell.get_microenv("pro_tumoral_factor"))  # (N,4)
+        anti = np.asarray(physicell.get_microenv("anti_tumoral_factor"))
+        vtree = cKDTree(pro[:, :2])
+        _, nearest = vtree.query(mac_xy)
+        is_M2 = pro[:, -1][nearest] > anti[:, -1][nearest]
+        if not is_M2.any():
+            return no_op
+        m2_xy = mac_xy[is_M2]
+
+        # ── keep only M2 macrophages within radius_micron of any tumour cell ─
+        ttree = cKDTree(tum_xy)
+        d_near, _ = ttree.query(m2_xy)
+        adj = m2_xy[d_near <= radius_micron]
+        if len(adj) == 0:
+            return no_op
+
+        # ── aim at the tumour-adjacent-M2 centroid; radius covers the cluster ─
+        cx, cy = adj[:, 0].mean(), adj[:, 1].mean()
+        spread = float(np.sqrt(((adj - adj.mean(axis=0)) ** 2).sum(axis=1).mean())) \
+            if len(adj) > 1 else radius_micron
+
+        # normalise to the wrapper's 0..1 convention
+        x_norm = float(np.clip((cx - self.x_min) / self.width, 0.0, 1.0))
+        y_norm = float(np.clip((cy - self.y_min) / self.height, 0.0, 1.0))
+        max_radius = np.sqrt((self.width / 2) ** 2 + (self.height / 2) ** 2)
+        # invert the wrapper's radius map: physical = (0.05 + r*0.15)*max_radius
+        r_phys = spread + radius_micron  # a little padding beyond the spread
+        r_norm = float(np.clip((r_phys / max_radius - 0.05) / 0.15, 0.0, 1.0))
+
+        return np.array([dose, x_norm, y_norm, r_norm], dtype=np.float32)
+
     def get_substrates_scalars(self):
         a_substrate = np.zeros(self.substrate_count, dtype=np.float32)
 
