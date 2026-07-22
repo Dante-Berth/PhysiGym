@@ -5,6 +5,10 @@
 ```
     self.get_img()
 
+    **kwargs:
+        possible additional keyword arguments input.
+        will be available in the instance through self.kwargs["key"].
+
 ```
 
 ## output:
@@ -21,9 +25,9 @@
     import gymnasium
     import physigym
 
-    env = gymnasium.make('physigym/ModelPhysiCellEnv', render_mode= None)
-    env = gymnasium.make('physigym/ModelPhysiCellEnv', render_mode='human')
-    env = gymnasium.make('physigym/ModelPhysiCellEnv', render_mode='rgb_array')
+    env = gymnasium.make("physigym/ModelPhysiCellEnv", render_mode= None)
+    env = gymnasium.make("physigym/ModelPhysiCellEnv", render_mode="human")
+    env = gymnasium.make("physigym/ModelPhysiCellEnv", render_mode="rgb_array")
 
     o_observation, d_info = env.reset()
     env.render()

@@ -23,9 +23,9 @@
 ```
     template code to generate a matplotlib figure from the data.
     for example from:
-    + physicell.get_microenv('my_substrate')
+    + physicell.get_microenv("my_substrate")
     + physicell.get_cell()
-    + physicell.get_variable('my_variable')
+    + physicell.get_variable("my_variable")
     however, there are no limits.
 
 ```

@@ -22,9 +22,9 @@
 ## description:
 ```
     data for the observation object for example be retrieved by:
-    + physicell.get_parameter('my_parameter')
-    + physicell.get_variable('my_variable')
-    + physicell.get_vector('my_vector')
+    + physicell.get_parameter("my_parameter")
+    + physicell.get_variable("my_variable")
+    + physicell.get_vector("my_vector")
     however, there are no limits.
 
 ```

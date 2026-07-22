@@ -16,7 +16,7 @@
     import gymnasium
     import physigym
 
-    env = gymnasium.make('physigym/ModelPhysiCellEnv')
+    env = gymnasium.make("physigym/ModelPhysiCellEnv")
 
     env.unwrapped.verbose_true()
 

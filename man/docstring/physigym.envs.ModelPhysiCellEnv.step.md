@@ -6,7 +6,7 @@
     self.get_observation()
     self.get_terminated()
     self.get_truncated()
-    self.get_info()
+    self.get_info(kwargs)
     self.get_reward()
     self.get_img()
 
@@ -16,6 +16,10 @@
         custom variable, or custom vector label. the values are
         either single or numpy arrays of bool, integer, float,
         or string values.
+
+    **kwargs:
+        possible additional keyword arguments input.
+        will be available in the instance through self.kwargs["key"].
 
 ```
 
@@ -52,7 +56,7 @@
     import gymnasium
     import physigym
 
-    env = gymnasium.make('physigym/ModelPhysiCellEnv')
+    env = gymnasium.make("physigym/ModelPhysiCellEnv")
 
     o_observation, d_info = env.reset()
     o_observation, r_reward, b_terminated, b_truncated, d_info = env.step(action={})

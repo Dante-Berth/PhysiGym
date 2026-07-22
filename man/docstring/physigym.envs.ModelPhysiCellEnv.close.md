@@ -3,6 +3,9 @@
 
 ## input:
 ```
+    **kwargs:
+        possible additional keyword arguments input.
+        will be available in the instance through self.kwargs["key"].
 
 ```
 
@@ -16,7 +19,7 @@
     import gymnasium
     import physigym
 
-    env = gymnasium.make('physigym/ModelPhysiCellEnv')
+    env = gymnasium.make("physigym/ModelPhysiCellEnv")
 
     env.close()
 

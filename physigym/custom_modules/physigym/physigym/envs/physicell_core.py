@@ -551,7 +551,7 @@ class CorePhysiCellEnv(gymnasium.Env):
             self.get_observation()
             self.get_terminated()
             self.get_truncated()
-            self.get_info(kwrags)
+            self.get_info(kwargs)
             self.get_reward()
             self.get_img()
 

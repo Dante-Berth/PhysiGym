@@ -18,7 +18,7 @@
     import gymnasium
     import physigym
 
-    env = gymnasium.make('physigym/ModelPhysiCellEnv')
+    env = gymnasium.make("physigym/ModelPhysiCellEnv")
 
     o_observation, d_info = env.reset()
     o_observation, r_reward, b_terminated, b_truncated, d_info = env.step(action={})
