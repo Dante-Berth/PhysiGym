@@ -770,7 +770,8 @@ $13$ CPU-resident environment processes generate experience in parallel.
 
 \paragraph{Compute.}
 Each run trains a single observation mode for one seed to $10^5$ agent decisions
-($6\!\times\!10^5$ simulator steps) in approximately $5$ hours of wall-clock time
+($6\!\times\!10^5$ simulator steps) in roughly $3$--$5$ hours of wall-clock time
+(including simulation, experience collection, and learner updates)
 on a single workstation (one NVIDIA GeForce RTX 4090 GPU-resident learner with
 $13$ CPU-resident environment workers on an Intel Core i9-13900K, 32 logical
 cores). The asynchronous design decouples the GPU learner from the
@@ -778,6 +779,42 @@ comparatively slow \physicell{} simulator, so throughput is limited by the CPU
 environment workers rather than by gradient updates; this is what makes the
 full observation-space sweep (nine modes, $5$ seeds each) tractable on a
 single machine.
+
+\paragraph{Bridge overhead and throughput.}
+To characterise the cost of the \physigym{} bridge itself we time a single
+environment's \texttt{step()} in isolation (median over $60$ steps after warm-up,
+one worker, on the workstation above); each \texttt{step()} runs the C++
+\physicell{} simulator step and the Python observation read-back that the bridge
+adds on top (Table~\ref{tab:throughput}). A single environment sustains
+${\approx}12$--$13$ steps/s. Crucially, switching from the scalar POMDP
+observation to a full nine-channel image observation raises the per-step time by
+only ${\approx}13\%$ ($76.9\!\to\!86.3$\,ms), and the cell-only image is
+indistinguishable from the scalar mode: the observation read-back is a small
+fraction of the step, which is dominated by the simulator itself. This is why the
+choice of observation space (Section~\ref{sec:obs}) barely affects wall-clock, and
+why aggregate throughput scales with the number of parallel CPU workers rather
+than with observation richness --- the $13$-worker configuration reaches on the
+order of ${\approx}150$\,steps/s of aggregate experience, so the
+$6\!\times\!10^5$-step budget plus learner updates completes in the
+$3$--$5$\,h per run reported above.
+
+\begin{table}[h]
+  \centering\small
+  \caption{Single-environment \physigym{} step cost (one CPU worker; median over
+    $60$ steps, warm-up discarded). The bridge's observation read-back adds at
+    most ${\approx}13\%$ over the raw simulator step; image observations are not a
+    throughput bottleneck.}
+  \label{tab:throughput}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Observation mode} & \textbf{ms/step (median)} & \textbf{p90 (ms)} & \textbf{steps/s} \\
+    \midrule
+    \texttt{scalars\_macrophages} (POMDP) & 76.9 & 78.5 & 13.0 \\
+    \texttt{img\_mc\_cells} (I1)          & 75.6 & 77.6 & 13.2 \\
+    \texttt{img\_mc\_cells\_substrates} (I2) & 86.3 & 88.3 & 11.6 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \paragraph{Action repeat.}
 Each action selected by the agent is held fixed for $6$ consecutive simulator
