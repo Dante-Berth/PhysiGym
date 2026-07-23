@@ -85,10 +85,24 @@ TikZ, `\label{fig:framework}`) + code snippet next (items 1–2).
 - **Item 7** — 54 dropped em-dashes fixed (prose only), reward denominator motivated,
   hardware spec filled (RTX 4090 / i9-13900K); domain-size concern confirmed FALSE.
 
-**Still open / possible next:** items 5 (single-direction transfer — deferred to
-future work by decision), 6 (biological grounding), 7-related "related-work
-positioning of the framework" (audit item 1's third bullet — not yet done). And the
-Stage 4/5 heuristic-baseline integration remains independent of all the above.
+**Also DONE 2026-07-23 (continuation):**
+- **Framework related-work positioning** (audit item 1, third bullet): Introduction
+  paragraph contrasting PhysiGym (general reusable bridge) vs. zade2020/aif2025
+  (problem-specific couplings) and vs. a hand-rolled wrapper.
+- **Item 6 (biological grounding):** Limitations sentence — rules are illustrative,
+  not data-fit; no sensitivity analysis; grounding named as future work.
+- **⚠️ COMPILE GOTCHA:** the new intro paragraph pushed a citation hyperlink across
+  the page-2 break → pdfTeX segfault (`\pdfendlink ... nesting level`). Fixed with a
+  `\newpage` before that paragraph. If you edit the intro and the build segfaults at
+  `[2`, this is why — move/keep the `\newpage`, don't chase preamble hyperref hacks
+  (tried breaklinks etc., none worked; only the page-break relocation did).
+
+**Now everything on `main`** (branch `paper/stage6-framework-figure` merged + deleted
+per user). Paper compiles clean, **21 pages, 0 undefined refs.**
+
+**Still open / possible next:** item 5 (reverse-direction transfer — deferred to
+future work by decision, needs a run). Stage 4/5 heuristic-baseline integration
+remains independent of all the above.
 
 _Original roadmap (decisions + how-to) preserved below for reference._
 
