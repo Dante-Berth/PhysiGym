@@ -63,10 +63,22 @@ def _ewma(a, w=50):
     return uniform_filter1d(a, size=min(w, len(a)), mode="nearest")
 
 
+import re as _re
+
+MAX_SEEDS = 5  # fixed n=5 per mode; keep the 5 lowest seed-ids (first-5-by-seed-id)
+
+
+def _seed_id(path):
+    m = _re.search(r"seed(\d+)", os.path.basename(path))
+    return int(m.group(1)) if m else 10**9
+
+
 def load(mode, col):
-    """Return list of (steps, values) per seed for a metric column."""
+    """Return list of (steps, values) per seed for a metric column.
+    Capped at the MAX_SEEDS lowest seed-ids so every mode reports n=5."""
     out = []
-    for f in sorted(glob.glob(os.path.join(DATA, mode, "SAC_*.csv"))):
+    files = sorted(glob.glob(os.path.join(DATA, mode, "SAC_*.csv")), key=_seed_id)[:MAX_SEEDS]
+    for f in files:
         df = pd.read_csv(f)[["step", col]].dropna()
         if len(df) > 3:
             out.append((df["step"].to_numpy(), df[col].to_numpy()))
