@@ -16,7 +16,11 @@
     \node[cpp] (start)  {\texttt{physicell\_start}};
     \node[cpp, right=8mm of start] (step) {\texttt{physicell\_step}\\{\scriptsize(inject \texttt{drug\_1})}};
     \node[cpp, right=8mm of step]  (stop) {\texttt{physicell\_stop}};
-    \node[cpp, fit=(start)(step)(stop), inner sep=6mm, label=above:{\textbf{\physicell{} core (C++)  BioFVM + ABM}}] (cppbox) {};
+    \begin{pgfonlayer}{background}
+      \node[draw, rounded corners, fill=blue!8, fit=(start)(step)(stop),
+            inner sep=6mm,
+            label=above:{\textbf{\physicell{} core (C++) --- BioFVM + ABM}}] (cppbox) {};
+    \end{pgfonlayer}
 
     % --- read functions ---
     \node[cpp, below=10mm of step, xshift=-16mm] (getcell)    {\texttt{get\_cell}};

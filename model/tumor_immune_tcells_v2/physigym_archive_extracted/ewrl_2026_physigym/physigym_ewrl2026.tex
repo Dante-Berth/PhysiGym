@@ -71,7 +71,7 @@ through spatial scalar summaries, to full multi-channel spatial images.
 Training on a structured rectangle layout and testing on a held-out
 network-field layout, we find that spatially explicit image observations
 generalize markedly better than scalar summaries: image modes reach a mean
-held-out test return of ${\approx}{+}30$ to $+32$, whereas spatial-scalar
+held-out test return of ${\approx}{+}32$ to $+33$, whereas spatial-scalar
 summaries train comparably ($+43$) but collapse to ${\approx}0$ out of
 distribution, and the macrophage-only POMDP baseline fails to learn at all
 ($-32$). This demonstrates that \physigym{}'s flexible state-space interface
@@ -508,8 +508,8 @@ vs.\ cumulative environment steps with mean $\pm$ std shading across seeds.
     fluctuates over training, so we do not claim a systematic variance
     advantage for any single family; the POMDP baseline has the lowest test
     variance simply because it converges to a uniformly poor policy.
-    At end of training the image modes reach test return ${\approx}{+}30$ with
-    std ${\approx}7$--$12$ (Table~\ref{tab:results}).}
+    At end of training the image modes reach test return ${\approx}{+}33$ with
+    std ${\approx}5$--$11$ (Table~\ref{tab:results}).}
   \label{fig:std_curves}
 \end{figure}
 
@@ -518,7 +518,7 @@ vs.\ cumulative environment steps with mean $\pm$ std shading across seeds.
   \includegraphics[width=\linewidth]{img/test_return_mean50.pdf}
   \caption{Held-out test return on the network-field layout (mean $\pm 1\sigma$
     across seeds, EWMA-50) vs.\ cumulative simulator steps.
-    The image modes (I2m, I2, I1) climb steadily to ${\approx}{+}30$, whereas
+    The image modes (I2m, I2, I1) climb steadily to ${\approx}{+}33$, whereas
     the spatial-scalar summary (S3s) --- which trained \emph{best}
     (Figure~\ref{fig:train_curves}) --- collapses to ${\approx}0$, revealing that
     it overfits the fixed rectangle geometry rather than learning transferable
@@ -628,7 +628,7 @@ The toy model also produces a clear result on observation spaces, and crucially
 one that only surfaces under distribution shift. On the training rectangle
 layout, spatial-scalar summaries are fully competitive with image observations;
 it is on the held-out network-field that spatially explicit (image)
-observations pull ahead, generalizing to ${\approx}{+}30$ test return while the
+observations pull ahead, generalizing to ${\approx}{+}33$ test return while the
 scalar summaries collapse to ${\approx}0$. The CNN in the image modes can
 compute cross-channel co-localisation statistics (e.g.\ whether \texttt{drug\_1}
 and macrophages overlap at the same location) directly from the pixel layout
@@ -717,7 +717,7 @@ spatially explicit biological simulations.
 Using a TME model with an indirect drug mechanism, we showed that spatially
 explicit image observations are the critical state representation for
 \emph{generalization}: training on a structured rectangle layout and testing on
-a held-out network-field, image modes retain ${\approx}{+}30$ to $+32$ test
+a held-out network-field, image modes retain ${\approx}{+}32$ to $+33$ test
 return while spatial-scalar summaries --- competitive during training --- collapse
 to ${\approx}0$ out of distribution, and a macrophage-count-only POMDP baseline
 fails to learn at all.
@@ -1031,7 +1031,7 @@ Figures~\ref{fig:train_ci} and~\ref{fig:test_ci}.
 
 The bootstrap intervals sharpen the main-text claims. On the held-out
 network-field, the three image modes have test-return CIs that lie entirely
-above $+24$, whereas every spatial-scalar mode has a test-return CI that
+above $+23$, whereas every spatial-scalar mode has a test-return CI that
 \emph{contains zero} (e.g.\ S3s $[-6.2,+9.1]$), so their generalization is not
 statistically distinguishable from a non-learning policy. The image and
 spatial-scalar CIs do not overlap, confirming that the generalization gap is
