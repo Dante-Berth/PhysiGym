@@ -66,6 +66,93 @@ table if sim time allows, (4) reproducibility-claim scoping (text-only, cheap),
 **IN PROGRESS 2026-07-23:** framework dataflow figure written (`fig_framework.tex`,
 TikZ, `\label{fig:framework}`) + code snippet next (items 1–2).
 
+### Stage 6 — EXECUTION ROADMAP (decisions locked 2026-07-23)
+
+Status legend: [x] done · [~] in progress · [ ] todo · [FW] deferred to future work.
+
+**[x] Item 1 — framework figure + code listing.** DONE this session
+(`fig_framework.tex` `fig:framework`, `listing_env.tex` `lst:env`, wired into §2.1;
+compiles 19pp, 0 undefined refs; committed `paper/stage6-framework-figure`).
+
+**[ ] Item 2 — performance/overhead characterization.** NOT STARTED. Needs a real
+measurement, not text. Plan:
+  1. Micro-bench the bridge: median wall-clock per `physicell_step` and per
+     `env.step` (action-repeat=6) for one representative mode, single env. Isolate
+     Python-extension overhead = `env.step` time − raw C++ step time.
+  2. Scaling: throughput (agent-decisions/s AND simulator-steps/s) vs
+     `N_env` ∈ {1,4,8,13,20,28}, holding the learner fixed. Shows the CPU-worker
+     bottleneck claim quantitatively → substantiates "scalable" in the abstract.
+  3. Deliverable: a small table (`tab:throughput`) in Appendix A + 2–3 sentences in
+     §A "Compute". Record GPU/CPU model here too (fixes Item 7 hardware-spec gap).
+  Est: ~1–2 h incl. a short timed run. No training needed (rollout-only timing).
+  **Gotcha:** rollouts aren't bit-reproducible (CLAUDE.md) but *timing* is fine to
+  measure; report median over ≥100 steps, warm-up discarded.
+
+**[~] Item 3 — under-powered → make it consistent at n=5 (DECISION: 5 seeds only).**
+  - **DECIDED:** keep **exactly n=5 per mode**; drop extras by **first-5-by-seed-id**
+    (lowest numeric seed IDs). Verified the CSVs exist to do this:
+    - I1 (`img_mc_cells`): has {1,2,4,5,42,123} → **drop 123**, keep {1,2,4,5,42}.
+    - I2 (`img_mc_cells_substrates`): has {1,2,3,4,5,42,123} → **drop {42,123}**,
+      keep {1,2,3,4,5}.
+    - All other modes already n=5 — untouched.
+  - **TODO to execute:**
+    (a) add a seed-allowlist (first-5-by-id) to `plot_tme_new.py` /
+        `plot_tme_bootstrap.py`; regenerate `out_tme_new/` + `out_tme_bootstrap/`.
+    (b) update Table 1 (`tab:results`), Table `tab:allmodes`, Table `tab:bootstrap`,
+        and the return-curve figures to the new n=5 numbers.
+    (c) global text pass: replace every "n=5–7" / "5–7 seeds" / "unevenly
+        distributed" with "n=5 per mode" (locations: table captions L427–434,
+        §Limitations L646–648, App B L927). The "uneven seeds" mitigation sentence
+        in Limitations can be shortened since it no longer applies.
+  - **[FW] Reverse-direction transfer** (train network-field → test rectangle):
+    **DECISION: leave as future work, no new run.** Just tighten the existing
+    Limitations sentence (L650–651) so it reads as a deliberate single-direction
+    scope + explicit future-work item, not an omission. Text-only.
+
+**[ ] Item 4 — statistical testing beyond CIs. HOW TO IMPROVE (concrete):**
+  The fix is to add explicit tests/effect sizes so claims don't rest on eyeballing
+  CI overlap. Cheap, no new runs (uses the same per-seed end-of-training returns):
+  1. **Image-vs-scalar generalization gap** (main claim): pool the 3 image modes'
+     test returns vs the 4 spatial-scalar modes' test returns and report a
+     **Mann–Whitney U** (rank-based, robust at small n) OR a permutation test on the
+     difference of means, with a **Cliff's δ** or **Hedges' g** effect size + its CI.
+     This replaces "CIs don't overlap" with a p-value + effect size.
+  2. **M1/M2-split ablation** (currently asserted null): for each pair
+     (I1 vs I1m, I2 vs I2m) report the **paired-by-seed difference**, its bootstrap
+     CI, and a **TOST equivalence test** against a pre-stated margin (e.g. ±1σ ≈ ±10
+     return). "Redundant" is only defensible as *statistical equivalence*, not a
+     non-significant difference — TOST states it correctly. If TOST can't confirm
+     equivalence at n=5, soften the wording to "no detectable improvement" instead of
+     "redundant".
+  3. **Seed-variance claim** ("no systematic advantage"): report **Levene's test** on
+     the across-seed test-return spread between families; if n.s., that *is* the
+     evidence for the "no systematic variance advantage" sentence.
+  4. Deliverable: a short "Statistical tests" paragraph in App B + one column/row in
+     `tab:bootstrap`, and reword the 3 affected claims (§Key findings L503–547,
+     §M1/M2 L549–562) to cite the test + effect size. Est: ~1 h, script in
+     `figures_plotting/` reusing the bootstrap seed arrays.
+
+**[ ] Item 7 — minor text/encoding fixes (all cheap, no runs):**
+  - **[FALSE — no fix]** "domain size 64µm vs 45µm kernel": VERIFIED consistent
+    against `config/PhysiCell_settings_env0.xml` (x/y_max=63, dx=1 → 64µm/64vox).
+    Only optionally add a note that $\ell_c=45$µm spans most of the field *by design*.
+  - **[ ] Dropped en/em-dashes:** 54 `\S  \S` gaps (grep-confirmed) incl. title L32.
+    These are the intended em-dash "" (or " -- ") lost in an encoding pass. Do a
+    reviewed replace — NOT blind sed, since some double-spaces may be legitimate
+    (post-period). Target list in Item 7 verbatim text above.
+  - **[ ] Reward normalization:** add one sentence after Eq.(reward) motivating the
+    $e^{\lambda\Delta t}-1$ denominator (it normalizes the observed drop by the drop
+    expected from one step of intrinsic exponential growth, making $r$ scale-free in
+    tumor count / comparable across ICs).
+  - **[ ] Hardware spec:** fill in exact GPU + CPU core count in §A "Compute"
+    (capture it during the Item 2 bench run — do these together).
+
+**Suggested execution order** (cheap→expensive, text-first so the paper is always
+compilable): Item 7 dashes+reward+hardware-stub → Item 3 text pass → Item 4 stats
+script+text → Item 3 (a/b) seed-trim regen → Item 2 bench (captures hardware for 7).
+
+---
+
 ### Stage 6 — full audit text (verbatim, as reviewed 2026-07-23)
 
 _Note: point 7's "domain size error" is the one item verified FALSE — see the
