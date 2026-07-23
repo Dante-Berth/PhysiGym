@@ -66,6 +66,32 @@ table if sim time allows, (4) reproducibility-claim scoping (text-only, cheap),
 **IN PROGRESS 2026-07-23:** framework dataflow figure written (`fig_framework.tex`,
 TikZ, `\label{fig:framework}`) + code snippet next (items 1–2).
 
+### Stage 6 — EXECUTION STATUS (all items DONE 2026-07-23)
+
+**All of items 1, 2, 3, 4, 7 are now implemented and committed** (branch
+`paper/stage6-framework-figure` in PhysiGym; bench script also there under
+`figures_plotting/`). Paper compiles clean, **20 pages, 0 undefined refs.** Summary:
+- **Item 1** — `fig_framework.tex` (`fig:framework`) + `listing_env.tex` (`lst:env`).
+- **Item 2** — `tab:throughput` + "Bridge overhead and throughput" para from real
+  micro-bench (`bench_framework.py`): scalars 76.9, I1 75.6, I2 86.3 ms/step; bridge
+  read-back <=13% over raw sim step. Wall-clock corrected to **3–5h/run** per user.
+- **Item 3** — n=5 everywhere (cap in `plot_tme_new.load`, first-5-by-seed-id: I1
+  dropped 123, I2 dropped 42+123); all 3 tables + 5 figures regenerated; inline
+  numbers updated (I1 test +33.4, I2 +32.7); reverse-direction reframed as future work.
+- **Item 4** — `stats_tests.py` + Appendix `app:stats`: image-vs-scalar
+  Mann–Whitney p=6.2e-7, Cliff's δ=+0.97; **M1/M2 "redundant" softened to "no
+  detectable improvement"** because TOST does NOT confirm equivalence at n=5;
+  seed-variance backed by Levene p=0.42.
+- **Item 7** — 54 dropped em-dashes fixed (prose only), reward denominator motivated,
+  hardware spec filled (RTX 4090 / i9-13900K); domain-size concern confirmed FALSE.
+
+**Still open / possible next:** items 5 (single-direction transfer — deferred to
+future work by decision), 6 (biological grounding), 7-related "related-work
+positioning of the framework" (audit item 1's third bullet — not yet done). And the
+Stage 4/5 heuristic-baseline integration remains independent of all the above.
+
+_Original roadmap (decisions + how-to) preserved below for reference._
+
 ### Stage 6 — EXECUTION ROADMAP (decisions locked 2026-07-23)
 
 Status legend: [x] done · [~] in progress · [ ] todo · [FW] deferred to future work.
