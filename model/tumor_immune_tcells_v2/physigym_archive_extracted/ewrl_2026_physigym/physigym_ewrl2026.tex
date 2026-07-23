@@ -127,6 +127,22 @@ More recently, \citet{aif2025failing} used \physicell{} as a complex
 (low-fidelity) RL training environment of coupled ordinary differential
 equations (ODE) to learn treatment strategies for solid tumors.
 
+\newpage
+Both of these efforts couple RL to a simulator for a \emph{single, fixed}
+problem: the coupling is bespoke, the observation and action spaces are hard-wired
+to the task, and the plumbing is not reusable across models. Consequently, a
+practitioner wishing to pose a different question --- a new cell type, a different
+readout, an image rather than a scalar observation --- must re-engineer the
+sim-to-RL interface each time. \physigym{}'s contribution is orthogonal and
+complementary: rather than one more problem-specific coupling, it is a
+\emph{general, reusable} bridge that turns \emph{any} \physicell{} model into a
+Gymnasium environment through subclassing and \physicell{}'s native user-parameter
+and custom-data constructs (Section~\ref{sec:physigym}), so the observation space,
+action space, and reward become configuration rather than re-implementation. The
+observation-space study in this paper is only possible \emph{because} the same
+underlying model can be re-exposed nine different ways without touching the
+simulator --- something a hand-rolled, single-purpose wrapper does not provide.
+
 \physigym{} bridges \physicell{} and Gymnasium to provide a reproducible and
 scalable framework for integrating agent-based simulations of biological systems
 with RL strategies. In the following, we present \physigym{}'s motivation and
@@ -679,7 +695,17 @@ training distribution and the irregular one is held out; evaluating the reverse
 direction (network-field$\to$rectangle) is a natural control that we leave to
 future work, as it would confirm that the image advantage reflects transferable
 spatial structure rather than the test layout being intrinsically easier.
-Complex biological models and/or 3D models are left to future work.
+The model's rules and parameters (growth, secretion, chemotaxis, and
+polarisation rates) are chosen to be biologically plausible and to reproduce the
+qualitative immunosuppression loop of Section~\ref{sec:model}, but they are
+\emph{illustrative rather than fit to a specific tumour or dataset}; we make no
+quantitative claim about a real cancer, and we have not performed a sensitivity
+analysis over these parameters. Grounding the rules in measured rates and
+checking robustness of the observation-space conclusion to that grounding is
+important future work --- and is exactly the kind of study \physigym{} is meant to
+make routine, since the calibration lives in the \physicell{} configuration rather
+than in the RL code. Complex biological models and/or 3D models are left to future
+work.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Conclusion}
