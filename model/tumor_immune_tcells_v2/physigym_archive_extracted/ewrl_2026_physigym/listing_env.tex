@@ -1,0 +1,54 @@
+% Minimal PhysiGym environment listing. \input{listing_env} where wanted.
+% Requires \usepackage{listings} + \usepackage{xcolor} in the preamble, and the
+% lstset below (or move it to the preamble). Faithful (condensed) to
+% custom_modules/physigym/physigym/envs/physicell_model.py.
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{green!45!black}\itshape,
+  stringstyle=\color{orange!80!black},
+  language=Python,
+  showstringspaces=false,
+  columns=fullflexible,
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=6pt,
+}
+\begin{figure}[t]
+\begin{lstlisting}
+from physigym.envs import CorePhysiCellEnv
+from gymnasium import spaces
+import numpy as np
+
+class ModelPhysiCellEnv(CorePhysiCellEnv):
+    # Action: localized drug injection (dose, x, y, radius), all normalized.
+    def get_action_space(self):
+        box = lambda: spaces.Box(0.0, 1.0, (1,), np.float32)
+        return spaces.Dict({"drug_1_dose": box(), "drug_1_x": box(),
+                            "drug_1_y": box(), "drug_1_radius": box()})
+
+    # Observation: e.g. per-cell-type 64x64 image channels (img_mc_cells).
+    def get_observation_space(self):
+        return spaces.Box(0, 255, (self.n_channels, 64, 64), np.uint8)
+
+    def get_observation(self):
+        # get_cell / get_microenv surface ABM state from the C++ core.
+        return self.render_cell_channels()          # -> (C, 64, 64) uint8
+
+    # Reward: tumor suppression minus a drug-cost penalty (Eq. in paper).
+    def get_reward(self):
+        dc = (self.count_prev - self.count) / self.growth_norm
+        return self.w_cell * dc - self.w_dose * self.get_dose_spent()
+
+    def get_terminated(self):
+        return self.count == 0                       # tumor eradicated
+\end{lstlisting}
+\caption{A complete \physigym{} environment: subclass \texttt{CorePhysiCellEnv} and
+  override the observation, action, and reward. The base class handles all
+  model-independent Gymnasium bookkeeping (\texttt{reset}/\texttt{step}, the
+  \physicell{} start/step/stop loop, and the \texttt{get\_cell}/\texttt{get\_microenv}
+  read-back), so no C++ recompilation is needed to expose a new state space.
+  (Condensed from \texttt{physicell\_model.py}.)}
+\label{lst:env}
+\end{figure}

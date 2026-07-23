@@ -18,6 +18,7 @@
 \usepackage{algpseudocode}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds}
+\usepackage{listings}
 
 \newcommand{\physigym}{\textsc{PhysiGym}}
 \newcommand{\physicell}{\textsc{PhysiCell}}
@@ -206,6 +207,14 @@ with minimal code changes.
 \physigym{} is tested on Linux, WSL, and macOS, with continuous integration via
 GitHub Actions. Documentation and tutorials are at
 \url{https://anonymous.4open.science/r/PhysiGym-76A7/man}.
+
+Figure~\ref{fig:framework} shows the resulting dataflow, and
+Listing~\ref{lst:env} gives a complete minimal environment: a user overrides
+only the observation, action, and reward, while the base class handles the
+\physicell{} start/step/stop loop and all Gymnasium bookkeeping.
+
+\input{fig_framework}
+\input{listing_env}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \subsection{Implementation of a Tumor Microenvironment Toy Model}

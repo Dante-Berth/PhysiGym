@@ -1,6 +1,140 @@
 # EWRL-2026 PhysiGym paper — revision status & next-session roadmap
 
-_Last updated: 2026-07-20. This is a handoff doc so work isn't lost between sessions._
+_Last updated: 2026-07-23. This is a handoff doc so work isn't lost between sessions._
+
+---
+
+## ⚠️ 2026-07-23 — PAPER-GAP AUDIT (non-heuristic). Stage 6 opened.
+
+A read-through of `physigym_ewrl2026.tex` (independent of the Stage 4/5 heuristic
+work) surfaced what the paper is **missing as a framework paper**. The RL
+generalization story (§3–4, image-vs-scalar OOD) is the strongest, most complete
+part; the gap is that the **primary stated contribution — PhysiGym itself — is
+asserted in prose but never shown**. Findings, ordered by leverage:
+
+**Highest leverage (directly back the stated primary contribution):**
+1. **No framework dataflow/architecture figure.** Every figure is about TME
+   results; none depicts the PhysiCell↔Python↔Gymnasium bridge
+   (`physicell_start/step/stop` + `get_cell/get_microenv/get_graph` loop). This is
+   the missing centerpiece figure for a "we built a framework" paper.
+2. **No minimal code snippet.** The selling point is "turn any PhysiCell model into
+   an RL env with minimal code changes" / subclass `CorePhysiCellEnv`, but the
+   reader never sees what that looks like. Want a ~15-line listing (obs/action/reward).
+3. **No throughput/scaling measurement.** Abstract says "scalable"; §A says
+   throughput is CPU-worker-limited — but nothing is measured. Need a steps/sec or
+   envs-vs-throughput table + Python-extension overhead to substantiate it.
+
+**Medium (harden the science):**
+4. **Reproducibility caveat is undisclosed in the .tex.** Abstract+Conclusion claim
+   "reproducible", but rollouts are NOT bit-reproducible across runs even
+   single-threaded (see CLAUDE.md). Scope the claim: aggregates/curves reproduce,
+   individual rollouts don't — or acknowledge the FP-nonassociativity determinism gap.
+5. **Single train→test direction** (rectangle→network-field). Reverse direction is
+   punted to future work but is the obvious control: without it "images generalize"
+   could partly be "network-field is just easier." One reverse run would harden the
+   central claim. (Already listed as optional TODO #4 above — elevate it.)
+6. **M1/M2-split ablation interpreted as null with no test.** "+32.4→+26.0 does not
+   improve" across 5 seeds is within noise; the "redundant" reading is asserted, not
+   shown. Same for "no systematic seed-variance advantage" — leans on visual CI
+   non-overlap only, no effect size / explicit test.
+7. **No related-work positioning of the framework** vs. other sim↔RL bridges or the
+   cited RL-on-ABM work (Zade, aif2025) — why PhysiGym over rolling your own wrapper.
+8. **No biological grounding / sensitivity of the toy model** for the bio half of the
+   venue (honest "toy" framing, but nothing ties rules/params to literature).
+
+**Minor text/encoding issues:**
+9. **54 dropped en/em-dashes** — an encoding issue left `\S  \S` double-space gaps
+   throughout (title L32; L68,143,194,277–278,329,343,507,560,569,592,634,729,…).
+   Confirmed via `grep -nP '\S  \S'`. These render as run-on gaps. A pass replacing
+   the intended `` (em-dash) / en-dash / colon is a quick, high-visibility fix.
+10. **Reward-eq normalization unmotivated** — the $e^{\lambda\Delta t}-1$ denominator
+    in Eq. (reward) is never explained.
+11. **No hardware spec** (which GPU / CPU core count) despite "single workstation".
+
+**CORRECTED (was in my first pass, verified false):** the "64×64 µm domain looks
+wrong" concern is **NOT a bug** — `config/PhysiCell_settings_env0.xml` confirms
+x/y_max=63, dx=1 → genuinely a 64×64 µm / 64×64-voxel domain, so images and domain
+are consistent. Worth only a *note* that the network-field correlation length
+$\ell_c=45$ µm spans most of the 64 µm field (by design), not a fix.
+
+### Stage 6 — Framework-contribution buildout (NEXT, non-heuristic)
+Recommended order: (1) framework dataflow TikZ figure + (2) code snippet → these two
+alone convert the least-supported part of the paper into the best. Then (3) throughput
+table if sim time allows, (4) reproducibility-claim scoping (text-only, cheap),
+(9) the dash/encoding pass (text-only, cheap). Items 5/6/7 depend on appetite for new runs.
+
+**IN PROGRESS 2026-07-23:** framework dataflow figure written (`fig_framework.tex`,
+TikZ, `\label{fig:framework}`) + code snippet next (items 1–2).
+
+### Stage 6 — full audit text (verbatim, as reviewed 2026-07-23)
+
+_Note: point 7's "domain size error" is the one item verified FALSE — see the
+CORRECTED note above; `config/PhysiCell_settings_env0.xml` has x/y_max=63, dx=1, so
+64×64 µm / 64 voxels is consistent. The $\ell_c=45$ µm point stands only as a "spans
+most of the field by design" note. Everything else below holds._
+
+**What's lacking in the PhysiGym EWRL 2026 paper**
+
+**1. The framework contribution is asserted, never shown.** The paper's stated primary
+contribution is PhysiGym itself (Intro (1), Discussion, Conclusion), yet Section 2.1
+describes it in prose only.
+- No code listing / minimal example showing the "minimal code changes" claim. The whole
+  selling point is "turn any PhysiCell model into an RL env with minimal code changes" —
+  but a reader never sees what subclassing `CorePhysiCellEnv` actually looks like. A ~15-line
+  snippet (observation/action/reward) would make the contribution concrete instead of a claim.
+- No architecture/dataflow figure for the framework. Every figure is about the TME results;
+  none depicts the PhysiCell↔Python↔Gymnasium bridge (the `physicell_start/step/stop` +
+  `get_cell/get_microenv/get_graph` loop). For a "we built a framework" paper, this is the
+  missing centerpiece figure.
+- No positioning against related tools. It cites prior RL-on-ABM work (Zade, aif2025) but
+  never contrasts PhysiGym with them or with other sim↔RL bridges as a framework. Why is this
+  better/different than rolling your own wrapper?
+
+**2. No performance/overhead characterization of the framework.** For an infrastructure
+paper, there's no quantification of the bridge cost: steps/sec, wall-clock per simulator step,
+GPU-learner vs CPU-worker throughput split, or the Python-extension overhead. "~5h/run" and
+"throughput limited by CPU workers" is stated but never measured. A scaling table (envs vs
+throughput) would substantiate the "scalable" claim in the abstract.
+
+**3. The RL result is under-powered and the paper says so but doesn't fix it.**
+- n=5–7 seeds, uneven across modes, self-flagged as a limitation. The bootstrap CIs mitigate
+  but don't cure it — several conclusions rest on non-overlap of CIs from 5 seeds.
+- Single train→test direction (rectangle→network-field). Reverse direction is punted to future
+  work, but it's the obvious control: without it, "images generalize" could partly be
+  "network-field is just easier." One reverse-direction run would substantially harden the
+  central claim.
+- Single algorithm (SAC). Fine to acknowledge, but the observation-space conclusion is
+  entangled with SAC+IMPALA-CNN specifics.
+
+**4. Weak/absent statistical testing beyond CIs.** Claims like "no systematic seed-variance
+advantage" and "image vs scalar CIs disjoint" lean entirely on visual CI non-overlap. There's
+no explicit significance test (e.g., a per-mode comparison or effect size), and the M1/M2-split
+ablation ("+32.4→+26.0 does not improve") is interpreted as null with no test — a 6-point drop
+across 5 seeds is well within noise, so the "redundant" reading is asserted, not shown.
+
+**5. Reproducibility gaps not disclosed in the paper.** The CLAUDE.md records that rollouts are
+not bit-reproducible across runs even single-threaded. That's a real caveat for a framework
+paper claiming "reproducible" (abstract, conclusion) — it's currently unstated in the .tex.
+Either the reproducibility claim should be scoped (curves/aggregates reproduce; individual
+rollouts don't) or the determinism issue acknowledged.
+
+**6. Toy-model realism / no biological validation.** The model is explicitly a "toy," which is
+honest, but the paper makes no attempt to tie any rule/parameter to literature values, nor any
+sensitivity analysis over the model's rules. For the bio audience (half the target venue),
+there's nothing connecting the learned policy to a plausible biological interpretation beyond
+the mechanism cartoon.
+
+**7. Minor but concrete text issues.**
+- ~~Domain size error/ambiguity~~ **VERIFIED FALSE (see note above):** the 64×64 µm domain is
+  consistent with the XML and the 64×64 images; only worth a note that $\ell_c=45$ µm spans
+  most of the field by design.
+- Title has a missing em-dash/colon (line 31–32: "Reinforcement Learning  A State-Space Study"
+  — double space where punctuation dropped). Same "  " gap recurs throughout (lines 68, 143,
+  194, 329, 343, 507, 560, 569, 592, 634, 729...) — dropped en/em-dashes from an encoding issue
+  that render as run-on gaps. **Confirmed: 54 occurrences via `grep -nP '\S  \S'`.**
+- Reward eq. defines $\lambda$ and $\Delta t$ but the exponential-normalization denominator is
+  never motivated (why $e^{\lambda\Delta t}-1$).
+- No compute/hardware spec (which GPU, CPU core count) despite "single workstation."
 
 ---
 

@@ -1,0 +1,49 @@
+% PhysiGym framework dataflow figure.
+% \input{fig_framework} inside a figure environment, OR use as-is (it wraps itself).
+% Requires: \usetikzlibrary{arrows.meta, positioning, fit, backgrounds}
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[
+      font=\small,
+      box/.style={draw, rounded corners, minimum height=8mm, inner sep=4pt, align=center},
+      cpp/.style={box, fill=blue!8},
+      py/.style={box, fill=green!8},
+      gym/.style={box, fill=orange!8},
+      flow/.style={-{Latex[length=2mm]}, thick},
+      readback/.style={-{Latex[length=2mm]}, thick, dashed},
+    ]
+    % --- C++ / PhysiCell layer ---
+    \node[cpp] (start)  {\texttt{physicell\_start}};
+    \node[cpp, right=8mm of start] (step) {\texttt{physicell\_step}\\{\scriptsize(inject \texttt{drug\_1})}};
+    \node[cpp, right=8mm of step]  (stop) {\texttt{physicell\_stop}};
+    \node[cpp, fit=(start)(step)(stop), inner sep=6mm, label=above:{\textbf{\physicell{} core (C++)  BioFVM + ABM}}] (cppbox) {};
+
+    % --- read functions ---
+    \node[cpp, below=10mm of step, xshift=-16mm] (getcell)    {\texttt{get\_cell}};
+    \node[cpp, right=4mm of getcell] (getmicro) {\texttt{get\_microenv}};
+    \node[cpp, right=4mm of getmicro] (getgraph) {\texttt{get\_graph}};
+
+    % --- Python env layer ---
+    \node[py, below=12mm of getmicro] (env) {\texttt{ModelPhysiCellEnv}\\{\scriptsize subclass of \texttt{CorePhysiCellEnv}}\\{\scriptsize get\_observation / get\_reward / get\_action\_space}};
+
+    % --- Gymnasium / agent layer ---
+    \node[gym, below=10mm of env] (agent) {SAC agent (Gymnasium API)\\{\scriptsize \texttt{env.step(a)} $\to$ \texttt{(obs, reward, done, info)}}};
+
+    % flows
+    \draw[flow] (getcell) -- (env);
+    \draw[flow] (getmicro) -- (env);
+    \draw[flow] (getgraph) -- (env);
+    \draw[readback] (step.south) -- (getmicro.north);
+    \draw[flow] (env) -- node[right]{\scriptsize obs, reward} (agent);
+    \draw[flow] (agent.west) to[out=180,in=180] node[left,align=right]{\scriptsize action\\\scriptsize (dose,$x$,$y$,$r$)} (step.west);
+  \end{tikzpicture}
+  \caption{\physigym{} dataflow. The \physicell{} C++ loop is exposed to Python as
+    three callables (\texttt{physicell\_start/step/stop}); only \texttt{physicell\_step}
+    is modified per model (here, to inject \texttt{drug\_1}). Three read functions
+    (\texttt{get\_cell}, \texttt{get\_microenv}, \texttt{get\_graph}) surface cell
+    positions, substrate fields, and neighbourhood graphs. A user subclasses
+    \texttt{CorePhysiCellEnv} to assemble these into a Gymnasium observation/reward,
+    and any RL algorithm drives the environment through the standard
+    \texttt{step}/\texttt{reset} API.}
+  \label{fig:framework}
+\end{figure}
