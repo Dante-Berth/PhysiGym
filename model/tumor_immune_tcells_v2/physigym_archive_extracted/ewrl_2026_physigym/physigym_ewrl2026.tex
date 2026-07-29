@@ -1043,27 +1043,27 @@ macrophage-only observation performs \emph{no better than, and plausibly worse
 than, random dosing}.
 
 \begin{table}[h]
-  \caption{Mean end-of-training return with a $95\%$ bootstrap confidence
-    interval on the mean ($B=10{,}000$ seed resamples; train = rectangle,
+  \caption{Mean end-of-training return over $n=5$ seeds (train = rectangle,
     test = network-field). Ordered by test mean.}
   \label{tab:bootstrap}
   \centering\small
-  \begin{tabular}{llcccc}
+  \begin{tabular}{llccc}
     \toprule
     \textbf{ID} & \textbf{Mode} & \textbf{$n$} &
-    \textbf{Train$_\mu$ (95\% CI)} & \textbf{Test$_\mu$ (95\% CI)} \\
+    \textbf{Train$_\mu$} & \textbf{Test$_\mu$} \\
     \midrule
-    I1    & \texttt{img\_mc\_cells}                     & 5 & $+30.8$ $[+21.3,+38.0]$ & $+33.4$ $[+23.6,+43.2]$ \\
-    I2    & \texttt{img\_mc\_cells\_substrates}         & 5 & $+45.3$ $[+40.5,+49.4]$ & $+32.7$ $[+28.6,+36.7]$ \\
-    I2m   & \texttt{img\_mc\_cells\_substrates\_m1m2}   & 5 & $+40.8$ $[+33.0,+47.3]$ & $+32.5$ $[+24.4,+40.5]$ \\
-    I1m   & \texttt{img\_mc\_cells\_m1m2}               & 5 & $+35.0$ $[+22.8,+45.6]$ & $+26.0$ $[+14.1,+35.2]$ \\
-    S5m   & \texttt{spatial\_scalars\_cells\_spatial\_no\_scalars\_substrates\_m1m2} & 5 & $+53.6$ $[+25.0,+85.1]$ & $+9.5$ $[+0.4,+17.1]$ \\
-    S3sm  & \texttt{spatial\_scalars\_cells\_substrates\_m1m2} & 5 & $+38.3$ $[+20.1,+65.9]$ & $+2.6$ $[-6.2,+14.0]$ \\
-    S3m   & \texttt{spatial\_scalars\_cells\_m1m2}      & 5 & $+41.8$ $[+19.8,+68.0]$ & $+2.5$ $[-7.6,+11.4]$ \\
-    S3s   & \texttt{spatial\_scalars\_cells\_substrates} & 5 & $+42.9$ $[+24.7,+58.8]$ & $-0.0$ $[-6.2,+9.1]$ \\
+    I1    & \texttt{img\_mc\_cells}                     & 5 & $+30.8$ & $+33.4$ \\
+    I2    & \texttt{img\_mc\_cells\_substrates}         & 5 & $+45.3$ & $+32.7$ \\
+    I2m   & \texttt{img\_mc\_cells\_substrates\_m1m2}   & 5 & $+40.8$ & $+32.5$ \\
+    I1m   & \texttt{img\_mc\_cells\_m1m2}               & 5 & $+35.0$ & $+26.0$ \\
+    S5m   & \texttt{spatial\_scalars\_cells\_spatial\_} & 5 & $+53.6$ & $+9.5$ \\
+          & \texttt{\quad no\_scalars\_substrates\_m1m2} &  &         &        \\
+    S3sm  & \texttt{spatial\_scalars\_cells\_substrates\_m1m2} & 5 & $+38.3$ & $+2.6$ \\
+    S3m   & \texttt{spatial\_scalars\_cells\_m1m2}      & 5 & $+41.8$ & $+2.5$ \\
+    S3s   & \texttt{spatial\_scalars\_cells\_substrates} & 5 & $+42.9$ & $-0.0$ \\
     \midrule
-    RAND  & random policy (baseline)                    & 5 & $-18.4$ $[-21.9,-14.9]$ & $-25.3$ $[-28.2,-22.8]$ \\
-    POMDP & \texttt{scalars\_macrophages}               & 5 & $-20.4$ $[-28.6,-13.8]$ & $-31.8$ $[-33.4,-29.4]$ \\
+    RAND  & random policy (baseline)                    & 5 & $-18.4$ & $-25.3$ \\
+    POMDP & \texttt{scalars\_macrophages}               & 5 & $-20.4$ & $-31.8$ \\
     \bottomrule
   \end{tabular}
 \end{table}
