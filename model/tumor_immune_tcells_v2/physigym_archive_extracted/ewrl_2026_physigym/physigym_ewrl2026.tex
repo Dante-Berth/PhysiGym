@@ -457,31 +457,31 @@ vs.\ cumulative environment steps with mean $\pm$ std shading across seeds.
 \begin{table}[h]
   \caption{Performance at end of training (train = rectangle, test =
     network-field, seeds averaged).
-    Train$_\mu$/Test$_\mu$: mean EWMA-50 return.
-    Train$_\sigma$/Test$_\sigma$: std across seeds; $n$ = number of seeds.
+    Train$_\mu$/Test$_\mu$: mean EWMA-50 return, with a $95\%$ bootstrap
+    confidence interval on the mean ($B=10{,}000$ seed resamples);
+    $n$ = number of seeds.
     This is the curated main set; the remaining \texttt{m1m2} scalar variants
-    appear in Appendix~\ref{app:allmodes}, and $95\%$ bootstrap confidence
-    intervals on the mean in Appendix~\ref{app:bootstrap}.
+    appear in Appendix~\ref{app:allmodes}.
     RAND is a random-action policy ($5$ seeds), included as a learning-free
     reference: modes below it fail to beat random behaviour.}
   \label{tab:results}
   \centering\small
-  \begin{tabular}{llcccccc}
+  \resizebox{\linewidth}{!}{%
+  \begin{tabular}{llccc}
     \toprule
     \textbf{ID} & \textbf{Mode} & \textbf{$n$} &
-    \textbf{Train$_\mu$} & \textbf{Train$_\sigma$} &
-    \textbf{Test$_\mu$}  & \textbf{Test$_\sigma$} \\
+    \textbf{Train$_\mu$ (95\% CI)} & \textbf{Test$_\mu$ (95\% CI)} \\
     \midrule
-    I1    & \texttt{img\_mc\_cells}                     & 5 & +30.8 & 9.5  & \textbf{+33.4} & 11.3 \\
-    I2    & \texttt{img\_mc\_cells\_substrates}         & 5 & +45.3 & 5.0  & +32.7          & 4.7 \\
-    I2m   & \texttt{img\_mc\_cells\_substrates\_m1m2}   & 5 & +40.8 & 8.5  & +32.5          & 9.4 \\
+    I1    & \texttt{img\_mc\_cells}                     & 5 & $+30.8$ $[+21.3,+38.0]$ & $\mathbf{+33.4}$ $[+23.6,+43.2]$ \\
+    I2    & \texttt{img\_mc\_cells\_substrates}         & 5 & $+45.3$ $[+40.5,+49.4]$ & $+32.7$ $[+28.6,+36.7]$ \\
+    I2m   & \texttt{img\_mc\_cells\_substrates\_m1m2}   & 5 & $+40.8$ $[+33.0,+47.3]$ & $+32.5$ $[+24.4,+40.5]$ \\
     \midrule
-    S3s   & \texttt{spatial\_scalars\_cells\_substrates} & 5 & +42.9 & 18.8 & $-0.0$        & 9.1 \\
+    S3s   & \texttt{spatial\_scalars\_cells\_substrates} & 5 & $+42.9$ $[+24.7,+58.8]$ & $-0.0$ $[-6.2,+9.1]$ \\
     \midrule
-    RAND  & random policy (baseline)                    & 5 & $-18.4$ & 4.0 & $-25.3$        & 3.0 \\
-    POMDP & \texttt{scalars\_macrophages}               & 5 & $-20.4$ & 8.3 & $-31.8$        & 2.3 \\
+    RAND  & random policy (baseline)                    & 5 & $-18.4$ $[-21.9,-14.9]$ & $-25.3$ $[-28.2,-22.8]$ \\
+    POMDP & \texttt{scalars\_macrophages}               & 5 & $-20.4$ $[-28.6,-13.8]$ & $-31.8$ $[-33.4,-29.4]$ \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 \begin{figure}[h]
@@ -509,7 +509,7 @@ vs.\ cumulative environment steps with mean $\pm$ std shading across seeds.
     advantage for any single family; the POMDP baseline has the lowest test
     variance simply because it converges to a uniformly poor policy.
     At end of training the image modes reach test return ${\approx}{+}33$ with
-    std ${\approx}5$--$11$ (Table~\ref{tab:results}).}
+    std ${\approx}5$--$11$ (Table~\ref{tab:allmodes}).}
   \label{fig:std_curves}
 \end{figure}
 
@@ -542,7 +542,8 @@ scalar summary among the best; only the OOD test reveals that it has overfit the
 fixed strip geometry of the rectangle. This separation is statistically
 supported: the image modes' $95\%$ bootstrap confidence intervals on the mean
 test return lie entirely above $+23$ and do not overlap those of any
-spatial-scalar mode, all of which contain zero (Appendix~\ref{app:bootstrap}).
+spatial-scalar mode, all of which contain zero (Table~\ref{tab:results};
+all nine modes in Appendix~\ref{app:bootstrap}).
 Pooling the per-seed test returns of the three image modes against the four
 spatial-scalar modes, the image family is higher with a Mann--Whitney
 $U$-test $p=6\times10^{-7}$ and a Cliff's $\delta=+0.97$ (near-complete
@@ -565,7 +566,8 @@ information, fails to improve on either distribution (train $-20.4$, test
 $-31.8$) --- and, crucially, does \emph{not} beat a random-action policy
 (train $-18.4$, test $-25.3$; RAND in Table~\ref{tab:results}). Its test return
 is if anything below random, and the two bootstrap CIs barely overlap
-(Appendix~\ref{app:bootstrap}): the macrophage-count signal is not merely
+($[-33.4,-29.4]$ vs.\ $[-28.2,-22.8]$, Table~\ref{tab:results}): the
+macrophage-count signal is not merely
 uninformative but actively misleading, steering dosing worse than chance.
 Knowing \emph{how many} macrophages are polarised without knowing \emph{where}
 the drug, cells, and gradients are is insufficient to solve the indirect,
@@ -579,7 +581,7 @@ the image modes.
 \paragraph{On seed robustness.}
 We do not observe a systematic seed-variance advantage for any family on this
 benchmark: end-of-training test std is $5$--$11$ for the image modes and $9$ for
-S3s (Table~\ref{tab:results}, Figure~\ref{fig:std_curves}), and a Levene test on
+S3s (Table~\ref{tab:allmodes}, Figure~\ref{fig:std_curves}), and a Levene test on
 the across-seed test-return spread of the image versus spatial-scalar families is
 not significant ($W=0.67$, $p=0.42$), so we cannot reject equal dispersion. The
 POMDP baseline's low std ($2.3$) reflects consistent failure rather than robustness.
@@ -687,8 +689,8 @@ Scaling to 3D or larger domains will increase the cost of image observations.
 All experiments use a single RL algorithm (SAC); alternative algorithms or
 model-based methods may interact differently with observation spaces.
 Each mode is trained with a modest, fixed number of seeds ($n=5$); we
-report bootstrap confidence intervals (Appendix~\ref{app:bootstrap}) alongside
-raw seed-standard-deviation, but the conclusions would be strengthened by more
+report bootstrap confidence intervals on every mean (Table~\ref{tab:results},
+Appendix~\ref{app:bootstrap}), but the conclusions would be strengthened by more
 seeds. We also study a single train/test layout direction
 (rectangle$\to$network-field), chosen so that the structured layout is the
 training distribution and the irregular one is held out; evaluating the reverse
@@ -1019,8 +1021,8 @@ network-field.
 \label{app:bootstrap}
 
 Because each mode is trained with only $n=5$ seeds, the across-seed
-standard deviations reported in Tables~\ref{tab:results}
-and~\ref{tab:allmodes} are themselves noisy estimates of dispersion. To quantify
+standard deviations reported in Table~\ref{tab:allmodes} are themselves noisy
+estimates of dispersion. To quantify
 uncertainty on the \emph{mean} return more robustly, we bootstrap over seeds:
 for each mode we resample the seeds with replacement $B=10{,}000$ times,
 recompute the mean end-of-training return of each resample, and report the
@@ -1043,29 +1045,32 @@ macrophage-only observation performs \emph{no better than, and plausibly worse
 than, random dosing}.
 
 \begin{table}[h]
-  \caption{Mean end-of-training return over $n=5$ seeds (train = rectangle,
-    test = network-field). Ordered by test mean.}
+  \caption{Mean end-of-training return with a $95\%$ bootstrap confidence
+    interval on the mean ($B=10{,}000$ seed resamples; train = rectangle,
+    test = network-field), for \emph{all} nine observation modes plus the
+    random baseline. The curated subset also appears in
+    Table~\ref{tab:results}. Ordered by test mean.}
   \label{tab:bootstrap}
   \centering\small
+  \resizebox{\linewidth}{!}{%
   \begin{tabular}{llccc}
     \toprule
     \textbf{ID} & \textbf{Mode} & \textbf{$n$} &
-    \textbf{Train$_\mu$} & \textbf{Test$_\mu$} \\
+    \textbf{Train$_\mu$ (95\% CI)} & \textbf{Test$_\mu$ (95\% CI)} \\
     \midrule
-    I1    & \texttt{img\_mc\_cells}                     & 5 & $+30.8$ & $+33.4$ \\
-    I2    & \texttt{img\_mc\_cells\_substrates}         & 5 & $+45.3$ & $+32.7$ \\
-    I2m   & \texttt{img\_mc\_cells\_substrates\_m1m2}   & 5 & $+40.8$ & $+32.5$ \\
-    I1m   & \texttt{img\_mc\_cells\_m1m2}               & 5 & $+35.0$ & $+26.0$ \\
-    S5m   & \texttt{spatial\_scalars\_cells\_spatial\_} & 5 & $+53.6$ & $+9.5$ \\
-          & \texttt{\quad no\_scalars\_substrates\_m1m2} &  &         &        \\
-    S3sm  & \texttt{spatial\_scalars\_cells\_substrates\_m1m2} & 5 & $+38.3$ & $+2.6$ \\
-    S3m   & \texttt{spatial\_scalars\_cells\_m1m2}      & 5 & $+41.8$ & $+2.5$ \\
-    S3s   & \texttt{spatial\_scalars\_cells\_substrates} & 5 & $+42.9$ & $-0.0$ \\
+    I1    & \texttt{img\_mc\_cells}                     & 5 & $+30.8$ $[+21.3,+38.0]$ & $+33.4$ $[+23.6,+43.2]$ \\
+    I2    & \texttt{img\_mc\_cells\_substrates}         & 5 & $+45.3$ $[+40.5,+49.4]$ & $+32.7$ $[+28.6,+36.7]$ \\
+    I2m   & \texttt{img\_mc\_cells\_substrates\_m1m2}   & 5 & $+40.8$ $[+33.0,+47.3]$ & $+32.5$ $[+24.4,+40.5]$ \\
+    I1m   & \texttt{img\_mc\_cells\_m1m2}               & 5 & $+35.0$ $[+22.8,+45.6]$ & $+26.0$ $[+14.1,+35.2]$ \\
+    S5m   & \texttt{spatial\_scalars\_cells\_spatial\_no\_scalars\_substrates\_m1m2} & 5 & $+53.6$ $[+25.0,+85.1]$ & $+9.5$ $[+0.4,+17.1]$ \\
+    S3sm  & \texttt{spatial\_scalars\_cells\_substrates\_m1m2} & 5 & $+38.3$ $[+20.1,+65.9]$ & $+2.6$ $[-6.2,+14.0]$ \\
+    S3m   & \texttt{spatial\_scalars\_cells\_m1m2}      & 5 & $+41.8$ $[+19.8,+68.0]$ & $+2.5$ $[-7.6,+11.4]$ \\
+    S3s   & \texttt{spatial\_scalars\_cells\_substrates} & 5 & $+42.9$ $[+24.7,+58.8]$ & $-0.0$ $[-6.2,+9.1]$ \\
     \midrule
-    RAND  & random policy (baseline)                    & 5 & $-18.4$ & $-25.3$ \\
-    POMDP & \texttt{scalars\_macrophages}               & 5 & $-20.4$ & $-31.8$ \\
+    RAND  & random policy (baseline)                    & 5 & $-18.4$ $[-21.9,-14.9]$ & $-25.3$ $[-28.2,-22.8]$ \\
+    POMDP & \texttt{scalars\_macrophages}               & 5 & $-20.4$ $[-28.6,-13.8]$ & $-31.8$ $[-33.4,-29.4]$ \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 \begin{figure}[h]
