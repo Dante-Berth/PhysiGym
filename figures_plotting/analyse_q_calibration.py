@@ -95,7 +95,19 @@ def rows_for(direction):
         if keep is not None:
             files = [f for f in files
                      if os.path.basename(f).rsplit("_", 1)[-1][:-4] in keep]
-        files = files[:MAX_SEEDS]
+        # De-duplicate by seed BEFORE taking the first five.  Some modes hold more
+        # than one run per seed (a relaunch after a crash), and a plain [:5] then
+        # returns e.g. seeds 1,1,2,2,3 -- three distinct seeds double-counted and
+        # reported as n=5, which both biases the mean towards the repeated seeds
+        # and understates sigma.  Affects exactly three rows: RAND in both
+        # directions and S3m in rect2net.  First run-id per seed, so deterministic.
+        seen, dedup = set(), []
+        for f in files:
+            s = _seed_id(f)
+            if s not in seen:
+                seen.add(s)
+                dedup.append(f)
+        files = dedup[:MAX_SEEDS]
         if not files:
             continue
 
