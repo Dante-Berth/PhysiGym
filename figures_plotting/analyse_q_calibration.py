@@ -79,35 +79,49 @@ def _tail(path, col, n):
     return np.nan if len(v) <= 3 else _ewma(v)[-n:].mean()
 
 
-def rows_for(direction):
-    cfg = DIRECTIONS[direction]
-    data = os.path.join(BASE, cfg["dir"])
+def select_runs(direction, mode, max_seeds=MAX_SEEDS):
+    """The canonical run selection for a (direction, mode).  THE single source of
+    truth -- every script, table and figure in Ch. 6 must call this rather than
+    re-deriving it, or the figures and the tables drift apart (they did: see
+    RESEARCH_LOG.md 2026-08-21).
 
-    keep = None
+    Two filters, in this order:
+
+    1.  Manifest restriction, where the direction defines one.  rect2net holds
+        runs beyond the reported sweep; only the run-ids in wandb_tme_new
+        produced the numbers this chapter reports.
+    2.  De-duplicate by seed BEFORE taking the first five.  Some modes hold more
+        than one run per seed (a relaunch after a crash), and a plain [:5] then
+        returns e.g. seeds 1,1,2,2,3 -- three distinct seeds double-counted and
+        reported as n=5, which both biases the mean towards the repeated seeds
+        and understates sigma.  First run-id per seed, so deterministic.
+
+    Together these also drop the crashed relaunches, which is why every run this
+    returns reaches at least 94.5k of the 100k agent decisions -- selecting
+    without them admits runs that stop at 5k and truncates any figure that
+    clips its x-axis to the shortest series.
+    """
+    cfg = DIRECTIONS[direction]
+    prefix = "RANDOM_" if mode == "random_baseline" else "SAC_"
+    files = sorted(glob.glob(os.path.join(BASE, cfg["dir"], mode, prefix + "*.csv")),
+                   key=_seed_id)
     if cfg["restrict"]:
         keep = set(pd.read_csv(os.path.join(BASE, cfg["restrict"])).run_id)
+        files = [f for f in files
+                 if os.path.basename(f).rsplit("_", 1)[-1][:-4] in keep]
+    seen, dedup = set(), []
+    for f in files:
+        s = _seed_id(f)
+        if s not in seen:
+            seen.add(s)
+            dedup.append(f)
+    return dedup[:max_seeds]
 
+
+def rows_for(direction):
     out = []
     for mode, mid in MODE_ID.items():
-        prefix = "RANDOM_" if mode == "random_baseline" else "SAC_"
-        files = sorted(glob.glob(os.path.join(data, mode, prefix + "*.csv")),
-                       key=_seed_id)
-        if keep is not None:
-            files = [f for f in files
-                     if os.path.basename(f).rsplit("_", 1)[-1][:-4] in keep]
-        # De-duplicate by seed BEFORE taking the first five.  Some modes hold more
-        # than one run per seed (a relaunch after a crash), and a plain [:5] then
-        # returns e.g. seeds 1,1,2,2,3 -- three distinct seeds double-counted and
-        # reported as n=5, which both biases the mean towards the repeated seeds
-        # and understates sigma.  Affects exactly three rows: RAND in both
-        # directions and S3m in rect2net.  First run-id per seed, so deterministic.
-        seen, dedup = set(), []
-        for f in files:
-            s = _seed_id(f)
-            if s not in seen:
-                seen.add(s)
-                dedup.append(f)
-        files = dedup[:MAX_SEEDS]
+        files = select_runs(direction, mode)
         if not files:
             continue
 
