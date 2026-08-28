@@ -1348,6 +1348,12 @@ if __name__ == "__main__":
         help="Max change in radius per step (normalised [0,1]). None = unconstrained.",
     )
     parser.add_argument("--action_mode", type=str, default="full")
+    # Previously hardcoded below; made flags so a sweep can set them per launch
+    # instead of editing this file between runs (which leaves no record in the
+    # run config of what was actually run).
+    parser.add_argument("--project", type=str, default="SAC_ASYNC_TME_NEW_HYP_REWARD")
+    parser.add_argument("--mode_train", type=str, default="rectangle")
+    parser.add_argument("--mode_test", type=str, default="network_field")
     parser.add_argument(
         "--mode",
         type=str,
@@ -1377,7 +1383,7 @@ if __name__ == "__main__":
 
     d_arg_wandb = {
         "entity": args.entity,
-        "project": "SAC_ASYNC_TME_NEW_HYP_REWARD",
+        "project": args.project,
         "sync_tensorboard": True,
         "monitor_gym": True,
         "save_code": True,
@@ -1484,8 +1490,8 @@ if __name__ == "__main__":
     d_arg_generation = {
         "params": params,
         "seed": i_seed,
-        "mode_train": ["rectangle"],
-        "mode_test": ["network_field"],
+        "mode_train": [args.mode_train],
+        "mode_test": [args.mode_test],
     }
 
     d_arg = {
