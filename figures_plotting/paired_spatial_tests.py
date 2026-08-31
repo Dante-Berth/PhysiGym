@@ -39,6 +39,9 @@ from scipy import stats
 from analyse_q_calibration import (
     select_runs, _seed_id, _tail, MODE_ID, DIRECTIONS,
 )
+# The uniform-action arm (H6) needs its own selector: the full sweeps live in
+# different projects and carry crashed stubs that MIN_ROWS drops.
+from plot_action_mode_ablation import seed_files
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(BASE, "out_paired_spatial")
@@ -71,6 +74,42 @@ METRICS = {
 def endpoint(direction, mode, col, tail):
     """{seed: end-of-training value} for one (direction, mode, column)."""
     return {_seed_id(f): _tail(f, col, tail) for f in select_runs(direction, mode)}
+
+
+def endpoint_action(direction, action_mode, mode, col, tail):
+    """As endpoint(), but for a given action condition (targeted / full)."""
+    return {_seed_id(f): _tail(f, col, tail)
+            for f in seed_files(direction, action_mode, mode)}
+
+
+def collect_action():
+    """H6: the same paired deltas under targeted vs uniform ('full') action.
+
+    Only the two critic metrics are collected, because H6 is about which of them
+    survives removing the spatial degree of freedom from the action.
+    """
+    rows = []
+    for direction in DIRECTIONS:
+        for action_mode in ("targeted", "full"):
+            for tag, scal, img, content in PAIRS:
+                for name in ("td_residual", "q_mae"):
+                    spec = METRICS[name]
+                    sv = endpoint_action(direction, action_mode, scal,
+                                         spec["col"], spec["tail"])
+                    iv = endpoint_action(direction, action_mode, img,
+                                         spec["col"], spec["tail"])
+                    for seed in sorted(set(sv) & set(iv)):
+                        a, b = iv[seed], sv[seed]
+                        if not (np.isfinite(a) and np.isfinite(b)):
+                            continue
+                        if a <= 0 or b <= 0:
+                            continue
+                        delta = (0.5 * (np.log(a) - np.log(b))
+                                 if name == "td_residual" else np.log(a) - np.log(b))
+                        rows.append(dict(metric=name, pair=tag, action=action_mode,
+                                         direction=direction, seed=seed,
+                                         image=a, scalar=b, delta=delta))
+    return pd.DataFrame(rows)
 
 
 def collect():
@@ -228,6 +267,20 @@ if __name__ == "__main__":
         for _, r in s.iterrows():
             print(f"  {d:9} {LABEL[r.metric]:28} {r.consistent:2}/{r.n:<3} "
                   f"mean={r['mean']:+8.3f} p={r.p:.3f}")
+
+    # ---- H6: does the paired effect survive removing spatial action? ----
+    act = collect_action()
+    act.to_csv(os.path.join(OUT, "paired_deltas_action.csv"), index=False)
+    print("\n== H6: paired effect by action condition ==")
+    for name in ("td_residual", "q_mae"):
+        for am in ("targeted", "full"):
+            sub = act[(act.metric == name) & (act.action == am)]
+            if sub.empty:
+                continue
+            k, n, p = sign_test(sub.delta.to_numpy(), METRICS[name]["h1"])
+            lo, hi = boot_ci(sub.delta.to_numpy())
+            print(f"  {LABEL[name]:28} {am:9} {k:2}/{n:<3} "
+                  f"mean={sub.delta.mean():+7.3f} [{lo:+.3f},{hi:+.3f}] p={p:.2e}")
 
     to_tex(allsum, os.path.join(OUT, "tab_paired_spatial.tex"))
     pd.concat([allsum, p1]).to_csv(os.path.join(OUT, "summary.csv"), index=False)
