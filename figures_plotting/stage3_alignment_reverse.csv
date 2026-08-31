@@ -1,0 +1,17 @@
+mode,family,split,n_runs,n_eps,align_mean,align_sd,final_tumor_med,id
+img_mc_cells,image,train,5,817,0.3465993645295664,0.06234292830387929,56.0,I1
+img_mc_cells,image,test,5,260,0.3543855268956498,0.05755801217442857,74.0,I1
+img_mc_cells_m1m2,image,train,5,764,0.3427999867828667,0.0630661953914043,58.0,I1m
+img_mc_cells_m1m2,image,test,5,237,0.3534148843468844,0.07011827237124282,84.0,I1m
+img_mc_cells_substrates,image,train,5,803,0.3494162365159929,0.06896710578185893,44.0,I2
+img_mc_cells_substrates,image,test,5,244,0.3501076566024207,0.059800776437143675,65.0,I2
+img_mc_cells_substrates_m1m2,image,train,5,790,0.34447684147170765,0.06472591036572092,49.0,I2m
+img_mc_cells_substrates_m1m2,image,test,5,245,0.3476170403080214,0.05491921250625317,75.0,I2m
+spatial_scalars_cells_substrates,scalar,train,5,753,0.33670505422036884,0.08279444789449185,58.0,S3s
+spatial_scalars_cells_substrates,scalar,test,5,237,0.3411185273560181,0.0694059029774662,79.0,S3s
+spatial_scalars_cells_m1m2,scalar,train,5,697,0.34161580470594194,0.08546552563606645,51.0,S3m
+spatial_scalars_cells_m1m2,scalar,test,5,222,0.3517354188280943,0.07513393874654954,77.0,S3m
+spatial_scalars_cells_substrates_m1m2,scalar,train,5,738,0.32951862905145607,0.07828425343538171,57.0,S3sm
+spatial_scalars_cells_substrates_m1m2,scalar,test,5,225,0.34117408742722677,0.06613981868153941,91.0,S3sm
+spatial_scalars_cells_spatial_no_scalars_substrates_m1m2,scalar,train,5,572,0.3296561823450339,0.08003602522025637,47.0,S5m
+spatial_scalars_cells_spatial_no_scalars_substrates_m1m2,scalar,test,5,179,0.33415191185080073,0.06860315751358331,64.0,S5m
