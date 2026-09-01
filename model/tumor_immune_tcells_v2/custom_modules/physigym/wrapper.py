@@ -790,10 +790,24 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.list_data.append(row)
 
         # collect (obs, action, reward) for Q-value calibration on test episodes
+        #
+        # NOTE: `obs` here is the step's *next* observation, so the tuple stored
+        # at index t is (o_{t+1}, a_t, r_t), not (o_t, a_t, r_t). run.py then
+        # scores Q(o_{t+1}, a_t) against the MC return G_t accumulated from r_t
+        # onward, so test_q_bias / test_q_mae carry a one-decision offset against
+        # the textbook definition of calibration.
+        #
+        # This is a DELIBERATE convention -- do not "fix" it in isolation. The
+        # offset is constant and applied identically to all nine observation
+        # modes, so it cannot generate a between-family difference, which is the
+        # only thing the analysis claims. Changing it would make new runs
+        # incomparable with the reported sweeps, and the checkpoints needed to
+        # recompute the old numbers were deleted 2026-07-20. Documented in the
+        # thesis (chapters/ch6_results.tex, third limit of sec:results:value).
         if self.generate_physicell_data:
             self._q_calib_buffer.append(
                 {
-                    "obs": obs,  # next_obs — what the critic sees as current state
+                    "obs": obs,  # next_obs -- see NOTE above
                     "action": action_arr.copy(),
                     "reward": reward,
                 }

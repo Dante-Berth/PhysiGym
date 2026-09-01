@@ -1041,6 +1041,21 @@ def run_async_sac(d_arg):
                 log_dict[f"charts/{split}_action_autocorr_lag1"] = a_autocorr
 
                 # ── Q-value calibration (test episodes only) ─────────
+                #
+                # CAVEAT, for anyone reading test_q_bias as a miscalibration
+                # measurement: the critic is regressed onto SAC's ENTROPY-
+                # AUGMENTED target (see the qf update below, which subtracts
+                # alpha * next_log_pi), so Q estimates the soft value
+                # E[sum gamma^t (r_t - alpha * log pi)]. mc_returns below sums
+                # rewards ALONE. The two differ by construction, by the
+                # discounted policy entropy, so a positive bias is expected
+                # before any miscalibration is present. Because alpha is
+                # autotuned it does not settle at the same value across
+                # observation modes, so this offset is not even constant between
+                # them. Use qf1_loss -- which compares the critic against its own
+                # soft target and so has no such mismatch -- for any claim that
+                # has to be robust. Documented in the thesis
+                # (chapters/ch6_results.tex, fourth limit of sec:results:value).
                 q_calib = stat.get("q_calibration_data", None)
                 if q_calib is not None and split == "test":
                     gamma = d_arg["rl"]["gamma"]
