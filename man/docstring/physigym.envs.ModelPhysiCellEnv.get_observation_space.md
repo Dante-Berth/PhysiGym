@@ -11,7 +11,7 @@
     o_observation_space structure.
         the struct have to be built out of gymnasium.spaces elements.
         there are no other limits.
-        + https://gymnasium.farama.org/main/api/spaces/
+        + https://gymnasium.farama.org/api/spaces/
 
 ```
 

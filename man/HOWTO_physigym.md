@@ -41,7 +41,7 @@ env.close()
 exit()
 ```
 
-8. Check out the [tutorial](https://github.com/Dante-Berth/PhysiGym/blob/main/man/TUTORIAL_physigym_model.md) to understand what you just ran.
+8. Check out the [tutorial](TUTORIAL_physigym_model.md) to understand what you just ran.
 
 
 ## How to fetch the latest version from this PhysiCell user project into this source code repository

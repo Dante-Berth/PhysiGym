@@ -12,7 +12,7 @@
         the dictionary keys have to match the parameter,
         custom variable, or custom vector label.
         the value has to be defined as gymnasium.spaces object.
-        + https://gymnasium.farama.org/main/api/spaces/
+        + https://gymnasium.farama.org/api/spaces/
 ```
 
 ## run:

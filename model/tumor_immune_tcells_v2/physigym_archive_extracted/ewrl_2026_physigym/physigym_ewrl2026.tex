@@ -30,7 +30,7 @@
 % ─────────────────────────────────────────────────────────────────────────────
 
 \title{\physigym{}: Bridging Agent-Based Biological Simulation and Reinforcement
-  Learning --- A State-Space Study on Tumor Microenvironment Control}
+  Learning --- An Observation-Space Study on Tumor Microenvironment Control}
 
 \author{%
   Alexandre Bertin$^{1,2,5,\dagger}$ \quad
@@ -64,7 +64,7 @@ control \emph{in silico} biological processes.
 We demonstrate \physigym{}'s potential through a case study on a simplified
 tumor microenvironment (TME) toy model, in which a Soft Actor-Critic agent
 learns targeted drug-delivery policies that steer the microenvironment toward an
-anti-tumoral state and, in the best episodes, achieve tumor elimination.
+anti-tumoral state and, in the best episodes, drive the tumor to near-eradication.
 We further use this case study to systematically compare a family of
 observation spaces --- from a partially observed macrophage-count baseline,
 through spatial scalar summaries, to full multi-channel spatial images.
@@ -74,7 +74,8 @@ generalize markedly better than scalar summaries: image modes reach a mean
 held-out test return of ${\approx}{+}32$ to $+33$, whereas spatial-scalar
 summaries train comparably ($+43$) but collapse to ${\approx}0$ out of
 distribution, and the macrophage-only POMDP baseline fails to learn at all
-($-32$). This demonstrates that \physigym{}'s flexible state-space interface
+($-32$). Swapping the layouts removes the gap, so the benefit of images is
+protection against overfitting a narrow training distribution. This demonstrates that \physigym{}'s flexible observation-space interface
 directly impacts policy quality and generalization in spatially structured
 environments.
 \physigym{} is open-source at \url{https://anonymous.4open.science/r/PhysiGym-76A7}.
@@ -199,6 +200,11 @@ The objective is
   \underset{\pi\in\Pi}{\arg\max}\;
   \mathbb{E}\!\left[\sum_{t=0}^{\tau}\gamma^t r_t \mid s_0,\,\pi\right].
 \]
+In our setting the agent never sees the full simulator state (every cell's
+position and internal variables, every voxel's substrate concentrations); it
+receives an observation $o_t = f(s_t)$ from an observation space $O$ chosen by the
+user, so the control problem is formally a partially observed MDP (POMDP). The
+observation map $f$ is exactly what we vary in Section~\ref{sec:obs}.
 Gymnasium~\citep{towers2024gymnasium} is the standard Python interface for MDPs,
 promoting modularity and code reuse across algorithms and environments.
 
@@ -275,6 +281,20 @@ are governed by biochemical spatial gradients (chemotaxis):
     repelled by the presence of pro-tumoral macrophages.
 \end{itemize}
 
+The mechanism is a simplified abstraction of \emph{macrophage-repolarising
+immunotherapy}. Tumour-associated macrophages (TAMs) with a pro-tumoral,
+M2-like phenotype are abundant in many solid tumours and are associated with
+poor prognosis~\citep{mantovani2017tumour}; they can physically exclude CD8$^+$
+T-cells from tumour nests and thereby limit checkpoint-blockade
+efficacy~\citep{peranzoni2018macrophages}. Re-educating TAMs toward an
+anti-tumoral, M1-like state, for example with CSF-1R
+inhibition~\citep{pyonteck2013csf} or TLR7/8 agonists delivered by
+nanoparticles that accumulate in TAMs~\citep{rodell2018tlr7}, is an active
+therapeutic strategy. \texttt{drug\_1} plays the role of such a
+TAM-repolarising agent: a locally delivered immunomodulator with no direct
+cytotoxicity. We use this mechanism qualitatively; the rates in the toy model are
+not fit to any of these studies (see Limitations).
+
 This setup creates a hostile, self-reinforcing feedback loop: the tumor protects 
 itself by converting macrophages, which in turn dynamically block T-cells from 
 reaching the target. As illustrated in Figure~\ref{fig:tme_network}, the RL agent 
@@ -303,6 +323,25 @@ observation modes --- spanning a partially observed scalar baseline, spatial
 scalar summaries, and multi-channel spatial images --- to assess whether
 spatially explicit representations help the agent learn and generalize on this
 toy model.
+
+We train every configuration with Soft Actor-Critic
+(SAC)~\citep{haarnoja2018soft}, using an asynchronous parallel implementation
+(Appendix~\ref{sec:training}); the network architectures and hyperparameters,
+including how they were selected, are given in Appendix~\ref{app:hyperparams}.
+
+\paragraph{Evaluation protocol.}
+Each run uses $13$ parallel environments. Every fourth episode of each environment
+is a \emph{test} episode: its initial condition is freshly sampled from the
+held-out network-field distribution, and the agent's actions do not enter the
+replay buffer. All other episodes are training episodes on freshly sampled
+rectangle layouts. A run therefore collects on the order of $200$ held-out test
+episodes, each on a distinct initial condition, and the per-run test return we
+report is the exponentially weighted mean (span $50$) over the last test
+episodes at the end of training. Each observation mode is trained with $n=5$
+independent training seeds, and all uncertainty statements aggregate over these
+seeds (bootstrap CIs, Appendix~\ref{app:bootstrap}; significance tests,
+Appendix~\ref{app:stats}). The test result is therefore not a single test seed
+or a single held-out layout.
 
 \paragraph{Action space.}
 At each gym step the agent selects
@@ -346,7 +385,7 @@ To ensure the model learns robust policies rather than overfitting to specific s
 \end{itemize}
 Training on the simple, regular rectangle layout and testing on the richer, irregular network-field is a demanding transfer: a policy that merely exploits the fixed strip geometry of the rectangle cannot solve the network-field, so the test return isolates whether an observation space encodes \emph{transferable} structure. Figure~\ref{fig:ic_distributions} illustrates representative examples of both distributions.
 
-\subsection{State space $S$: observation spaces compared}
+\subsection{Observation space $O$: modes compared}
 \label{sec:obs}
 
 In a tumor microenvironment there are different cell types and different
@@ -624,7 +663,9 @@ RL agents control a full agent-based TME through a standardised interface,
 without recompilation, and with arbitrary observation and action spaces. The
 toy-model case study shows the framework end-to-end --- an agent learns a spatial
 drug-delivery policy that steers the microenvironment toward an anti-tumoral
-state and, in the best episodes, eradicates the tumor.
+state and, in the best episodes, drives the tumor to near-eradication
+($3$ of $124$ tumor cells left in the matched held-out episode of
+Appendix~\ref{app:episodes}).
 
 The toy model also produces a clear result on observation spaces, and crucially
 one that only surfaces under distribution shift. On the training rectangle
@@ -676,6 +717,26 @@ position-absolute features.
   \label{fig:aiming_transfer}
 \end{figure}
 
+\paragraph{Reverse direction: the advantage depends on the training distribution.}
+\label{sec:reverse}
+To check that the network-field is not simply an easier test layout, we repeated
+the study with the roles swapped (train on network-field, test on rectangle) and
+compared image and scalar modes in matched pairs. In the original direction
+the image mode has the higher held-out return in $11/13$ pairs (mean
+$\Delta=+27.1$, 95\% CI $[+16.3,+36.2]$, sign test $p=0.01$), and a smaller
+generalisation gap in $13/13$ ($\Delta=-34.5$, $p=10^{-4}$). In the reverse
+direction the return advantage disappears ($7/15$ pairs, $\Delta=-6.5$,
+$[-16.9,+4.2]$, $p=0.70$), and the scalar modes also keep their drug aim under
+the shift (aiming degradation $+0.008$ against $+0.049$ in the forward direction).
+Image modes still fit the critic better in both directions (TD residual lower in
+$13/13$ and $15/15$ pairs). We read this as follows: trained on the irregular
+network-field, scalar agents cannot memorise a fixed strip position and are forced to use
+their spatial features, which then transfer. Spatially explicit observations
+therefore do not generalise better in every setting. They make the agent robust
+when the training distribution is narrow and structured, which is common in
+practice (few, stereotyped training geometries), and that is when the choice of
+observation space matters.
+
 We emphasise that this is an application-level observation on a deliberately
 simplified model, not a universal claim about biological control. In more
 complex or realistic models --- or with different reward designs, action spaces,
@@ -686,17 +747,17 @@ questions answerable in a reproducible way.
 \paragraph{Limitations.}
 The toy model is intentionally small (64\,$\mu$m, 2D) and cheap to simulate.
 Scaling to 3D or larger domains will increase the cost of image observations.
-All experiments use a single RL algorithm (SAC); alternative algorithms or
-model-based methods may interact differently with observation spaces.
+All experiments use a single RL algorithm (SAC) with one network size per
+observation family and one reward setting; alternative algorithms, model-based
+methods, other reward weightings, or larger encoders may interact differently
+with observation spaces, and we have not tested whether the image advantage
+survives these variations.
 Each mode is trained with a modest, fixed number of seeds ($n=5$); we
 report bootstrap confidence intervals on every mean (Table~\ref{tab:results},
 Appendix~\ref{app:bootstrap}), but the conclusions would be strengthened by more
-seeds. We also study a single train/test layout direction
-(rectangle$\to$network-field), chosen so that the structured layout is the
-training distribution and the irregular one is held out; evaluating the reverse
-direction (network-field$\to$rectangle) is a natural control that we leave to
-future work, as it would confirm that the image advantage reflects transferable
-spatial structure rather than the test layout being intrinsically easier.
+seeds. The image advantage is specific to training on a narrow layout
+(Section~\ref{sec:reverse}); we test only two layouts, and a wider family of
+train/test distributions would show where between these two extremes it appears.
 The model's rules and parameters (growth, secretion, chemotaxis, and
 polarisation rates) are chosen to be biologically plausible and to reproduce the
 qualitative immunosuppression loop of Section~\ref{sec:model}, but they are
@@ -723,9 +784,10 @@ a held-out network-field, image modes retain ${\approx}{+}32$ to $+33$ test
 return while spatial-scalar summaries --- competitive during training --- collapse
 to ${\approx}0$ out of distribution, and a macrophage-count-only POMDP baseline
 fails to learn at all.
-The gap is a generalization phenomenon: what separates the representations is
-not training fit but whether the encoded structure transfers across spatial
-configurations.
+The gap is a generalization phenomenon, and it depends on the training
+distribution: with the layouts swapped, scalar summaries generalize as well as
+images. Spatially explicit observations are therefore a safeguard against
+overfitting a narrow training distribution, not a universal improvement.
 \physigym{} provides the infrastructure to study such questions in a
 principled, reproducible manner, and we anticipate it will serve as a
 testbed for both computational biology and RL communities.
@@ -922,6 +984,7 @@ the smallest repeat that attains both.
     \midrule
     Agent decisions      & $T$              & $1\!\times\!10^5$ \\
     Action repeat        & --               & 6 \\
+    Max.\ per-step action change & $\Delta x,\Delta y,\Delta r$ & $0.25,\ 0.25,\ 0.03$ \\
     Effective simulator steps & $6T$        & $6\!\times\!10^5$ \\
     Replay buffer size   & $|\mathcal{B}|$  & $2\!\times\!10^5$ \\
     Batch size           & $B$              & 832 \\
@@ -936,6 +999,22 @@ the smallest repeat that attains both.
     \bottomrule
   \end{tabular}
 \end{table}
+
+\paragraph{Hyperparameter selection.}
+We tuned the environment-side hyperparameters, not the SAC optimiser, and did so
+once, before and independently of the observation-space comparison. A Latin
+hypercube design of $20$ configurations over the action repeat and the maximum
+per-step change of each targeted action component ($\Delta x$, $\Delta y$,
+$\Delta r$) was evaluated with probe rollouts ($6$ seeds $\times$ $2$ episodes
+per configuration) and scored by a standardised composite of tumour reduction,
+total dose, and action smoothness. Reward weights were then swept offline over
+the same rollouts ($w_{\text{cell}}\in\{0.1,0.3,0.5,1\}$,
+$w_{\text{dose}}\in\{0.5,1,2\}$), since they do not change the dynamics. This
+selected action repeat $6$, $(\Delta x,\Delta y,\Delta r)\approx(0.25,0.25,0.03)$,
+$w_{\text{cell}}=0.3$, and $w_{\text{dose}}=2$. The SAC hyperparameters in
+Table~\ref{tab:hyperparams} are standard values, shared by every observation mode
+and not tuned per mode, so no mode benefits from a larger tuning budget than
+another.
 
 \subsection{Choice of action repeat}
 \label{app:actionrepeat}

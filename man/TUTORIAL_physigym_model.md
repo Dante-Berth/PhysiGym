@@ -1,6 +1,6 @@
 # physigym : Bridging PhysiCell and Gymnasium
 
-Please install the latest version of the physigym user project, as described in the [HowTo](https://github.com/Dante-Berth/PhysiGym/blob/main/man/HOWTO_physigym.md) section.
+Please install the latest version of the physigym user project, as described in the [HowTo](HOWTO_physigym.md) section.
 
 
 ## The most basic run.
@@ -40,7 +40,7 @@ make data-cleanup
 ```
 
 
-## A more elaborate example ~ the [tutorial](https://github.com/Dante-Berth/PhysiGym/tree/main/model/tutorial) model.
+## A more elaborate example ~ the [tutorial](../model/tutorial) model.
 
 In this somewhat more realistic example, we will control the model so that the cell count for the "default" cell type over time stabilizes at about 64 cells.
 For observation, we will use cell counts.
@@ -52,7 +52,7 @@ For this tutorial, we assume you have additionally [PhysiCell Studio](https://gi
 
 0. Preparation (Bash).
 
-0.1 Load a fresh [template](https://github.com/Dante-Berth/PhysiGym/tree/main/model/template) model.
+0.1 Load a fresh [template](../model/template) model.
 
 ```bash
 make data-cleanup clean reset  # ./config/PhysiCell_settings-backup.xml related Error can be ignored!
@@ -94,9 +94,9 @@ Don't forget to save!
 1.3 Compile and run the model the classic way.
 
 For model development, it is sometimes useful to be able to compile and run the model the old-fashioned way.
-In fact, this is the only reason why we kept the original [main.cpp](https://github.com/Dante-Berth/PhysiGym/blob/main/physigym/main.cpp) in the physigym code base.
+In fact, this is the only reason why we kept the original [main.cpp](../physigym/main.cpp) in the physigym code base.
 Physigym as such is written on top of the [physicell embedding](https://github.com/elmbeech/physicellembedding) python_with_physicell module,
-for which the main.cpp file had to be ported to [custom/extending/physicellmodule.cpp](https://github.com/Dante-Berth/PhysiGym/blob/main/model/template/custom_modules/extending/physicellmodule.cpp) that you can find in the physigym code base too.
+for which the main.cpp file had to be ported to [custom/extending/physicellmodule.cpp](../model/template/custom_modules/extending/physicellmodule.cpp) that you can find in the physigym code base too.
 
 In physigym and in physicell embedding you can compile and run the model the old-fashioned way like this:
 
@@ -455,7 +455,7 @@ exit()
 4.4 Further readings.
 
 For more information about the Gymnasium interface, please study the official documentation!
-+ https://gymnasium.farama.org/main/
++ https://gymnasium.farama.org/
 
 
 5. The PhysiCell data loader for data analysis (Python and Bash).
@@ -500,11 +500,11 @@ mcdsts.plot_timeseries(focus_cat="cell_type", focus_num="apoptosis_rate", frame=
 mcdsts.plot_timeseries(focus_num="drug", frame="conc_df", title="mean drug concentration over time", ext="jpeg")
 ```
 
-![Tutorial Model](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/tutorial/model_tutorial.gif)
-![Tutorial Model Time Series](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/tutorial/model_tutorial_timeseries.jpeg)
+![Tutorial Model](img/tutorial/model_tutorial.gif)
+![Tutorial Model Time Series](img/tutorial/model_tutorial_timeseries.jpeg)
 
 
-## The [episode](https://github.com/Dante-Berth/PhysiGym/tree/main/model/episode) model.
+## The [episode](../model/episode) model.
 
 The physigym episode mode is more or less the PhysiCell episode sample project.
 The episode sample project comprises three cell types, each of which is secreting a substrate.
@@ -601,4 +601,4 @@ while not b_episode_over:
 env.close()
 ```
 
-![Episode Model](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/tutorial/model_episode.gif)
+![Episode Model](img/tutorial/model_episode.gif)

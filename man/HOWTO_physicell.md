@@ -2,8 +2,8 @@
 
 To install PhysiCell, please follow the instructions written for your operating system:
 
-+ [Linux](https://github.com/Dante-Berth/PhysiGym/blob/main/man/physicell_install_linux.md) &#x1F427;
-+ [MacOSX](https://github.com/Dante-Berth/PhysiGym/blob/main/man/physicell_install_apple.md) &#x1F350;
++ [Linux](physicell_install_linux.md) &#x1F427;
++ [MacOSX](physicell_install_apple.md) &#x1F350;
 
 
 If you run on Windows, install Windows Subsystem for Linux version 2, VS Code, and Git as described in the link below.

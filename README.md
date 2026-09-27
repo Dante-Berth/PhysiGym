@@ -30,7 +30,7 @@ PhysiGym is still BETA!
 PhysiCell is a physics-based cell simulator for 3D multicellular systems.
 More precisely, [PhysiCell](https://github.com/MathCancer/PhysiCell) is an agent-based model and diffusion transport solver that is off-lattice, center-based, multiscale in space and time, and written in [C++](https://en.wikipedia.org/wiki/C%2B%2B).
 
-[Gymnasium](https://gymnasium.farama.org/main/) is the API standard for reinforcement learning, written in [Python](https://en.wikipedia.org/wiki/Python_(programming_language)).
+[Gymnasium](https://gymnasium.farama.org/) is the API standard for reinforcement learning, written in [Python](https://en.wikipedia.org/wiki/Python_(programming_language)).
 
 The Python-based physigym module presented here was written on top of the python\_with\_physicell extending module from the [physicellembedding](https://github.com/elmbeech/physicellembedding) project, which makes it possible to extend the python interpreter to interact with PhysiCell models in the Python language.
 
@@ -47,21 +47,21 @@ May the force be with you!
 
 # &#x1F9E9; HowTo Guide:
 
-+ [install PhysiCell](https://github.com/Dante-Berth/PhysiGym/blob/main/man/HOWTO_physicell.md)
-+ [install and troubleshoot the physigym user_project](https://github.com/Dante-Berth/PhysiGym/blob/main/man/HOWTO_physigym.md)
-+ [uninstall the physigym user_project](https://github.com/Dante-Berth/PhysiGym/blob/main/man/HOWTO_purge.md)
++ [install PhysiCell](man/HOWTO_physicell.md)
++ [install and troubleshoot the physigym user_project](man/HOWTO_physigym.md)
++ [uninstall the physigym user_project](man/HOWTO_purge.md)
 
 
 # &#x1F9E9; Tutorial:
 
-+ [physigym modelling tutorial](https://github.com/Dante-Berth/PhysiGym/blob/main/man/TUTORIAL_physigym_model.md)
-+ [physigym reinforcement learning tutorial](https://github.com/Dante-Berth/PhysiGym/blob/main/man/TUTORIAL_physigym_rl.md)
++ [physigym modelling tutorial](man/TUTORIAL_physigym_model.md)
++ [physigym reinforcement learning tutorial](man/TUTORIAL_physigym_rl.md)
 
 
 # &#x1F9E9; Reference Manual:
 
-+ [reference manual](https://github.com/Dante-Berth/PhysiGym/blob/main/man/REFERENCE.md)
-+ [class ModelPhysiCellEnv gymnasium environment structure](https://github.com/Dante-Berth/PhysiGym/blob/main/man/ModelPhysiCellEnv_struct.md)
++ [reference manual](man/REFERENCE.md)
++ [class ModelPhysiCellEnv gymnasium environment structure](man/ModelPhysiCellEnv_struct.md)
 
 
 # Discussion:
