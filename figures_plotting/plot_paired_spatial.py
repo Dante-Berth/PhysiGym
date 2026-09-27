@@ -46,8 +46,14 @@ XLABEL = {
 POS, NEG = "#e63946", "#4361ee"     # red = favours scalar, blue = favours image
 
 
-def draw(ax, sub, spec, xlabel, group_col="pair", extra=None):
-    """One forest panel.  Rows are (pair, direction); bold aggregate row last."""
+def draw(ax, sub, spec, xlabel, group_col="pair", extra=None, demote_pooled=False):
+    """One forest panel.  Rows are (pair, direction); bold aggregate row last.
+
+    `demote_pooled`: the pooled "All" row is drawn light grey and non-bold
+    instead of solid black. Used only for paired_return, where the two
+    transfer directions carry opposite signs (§6.5) and the pooled p=0.09
+    averages them into a number the text says must not lead.
+    """
     rows, y = [], 0.0
     for tag, _, _, _ in PAIRS:
         for direction in ("rect2net", "net2rect"):
@@ -73,9 +79,12 @@ def draw(ax, sub, spec, xlabel, group_col="pair", extra=None):
     k, n, p = sign_test(d_all, spec["h1"])
     lo, hi = boot_ci(d_all)
     y_agg = y + 0.25
-    ax.plot([lo, hi], [y_agg, y_agg], color="k", lw=2.4, zorder=5,
+    agg_color = "0.65" if demote_pooled else "k"
+    agg_lw = 1.6 if demote_pooled else 2.4
+    agg_ms = 5 if demote_pooled else 7
+    ax.plot([lo, hi], [y_agg, y_agg], color=agg_color, lw=agg_lw, zorder=5,
             solid_capstyle="round")
-    ax.plot([d_all.mean()], [y_agg], "D", color="k", ms=7, zorder=6)
+    ax.plot([d_all.mean()], [y_agg], "D", color=agg_color, ms=agg_ms, zorder=6)
     rows.append((y_agg, f"All ({k}/{n}, p={p:.1g})", d_all))
 
     ax.axvline(0, ls="--", lw=1.0, color="0.35", zorder=1)
@@ -84,7 +93,9 @@ def draw(ax, sub, spec, xlabel, group_col="pair", extra=None):
     ax.set_yticklabels(labels)
     for tick, lab in zip(ax.get_yticklabels(), labels):
         if lab.startswith("All"):
-            tick.set_fontweight("bold")
+            tick.set_fontweight("normal" if demote_pooled else "bold")
+            if demote_pooled:
+                tick.set_color("0.4")
     ax.invert_yaxis()
     ax.set_xlabel(xlabel)
     ax.set_title(f"Prediction: {PRED[spec['h1']]}" + (f"   {extra}" if extra else ""),
@@ -99,12 +110,13 @@ def save(fig, name):
     print(f"wrote {OUT}/{name}.pdf")
 
 
-def fig_pair(df, metrics, name):
+def fig_pair(df, metrics, name, demote_pooled=False):
     plt.rcParams.update({"font.size": 9, "axes.grid": True, "grid.alpha": 0.25,
                          "savefig.dpi": 300, "savefig.bbox": "tight"})
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.9))
     for ax, metric in zip(axes, metrics):
-        draw(ax, df[df.metric == metric], METRICS[metric], XLABEL[metric])
+        draw(ax, df[df.metric == metric], METRICS[metric], XLABEL[metric],
+             demote_pooled=demote_pooled)
     save(fig, name)
 
 
@@ -130,7 +142,7 @@ def fig_action(act):
 def main():
     df = pd.read_csv(os.path.join(OUT, "paired_deltas.csv"))
     fig_pair(df, ["td_residual", "q_mae"], "paired_critic")
-    fig_pair(df, ["test_return", "gap"], "paired_return")
+    fig_pair(df, ["test_return", "gap"], "paired_return", demote_pooled=True)
     fig_action(pd.read_csv(os.path.join(OUT, "paired_deltas_action.csv")))
 
 

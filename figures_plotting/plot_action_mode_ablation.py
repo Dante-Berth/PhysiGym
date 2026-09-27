@@ -160,7 +160,8 @@ def draw(fname="action_mode_ablation"):
     mode_h = [Line2D([], [], color=MODE_META[m]["color"], ls="-", lw=1.7,
                      label=MODE_META[m]["id"]) for m in MODE_ORDER]
     act_h = [Line2D([], [], color="0.25", ls=ACTION_STYLE[a]["ls"],
-                    lw=ACTION_STYLE[a]["lw"], label=f"{a} action space")
+                    lw=ACTION_STYLE[a]["lw"],
+                    label=f"{'uniform' if a == 'full' else a} action space")
              for a in ("targeted", "full")]
     fig.legend(handles=mode_h + act_h, loc="lower center", ncol=12, frameon=False,
                bbox_to_anchor=(0.5, -0.045), fontsize=9.0, columnspacing=1.3,
@@ -236,7 +237,7 @@ def collapse(fname="action_mode_collapse"):
             ax.plot(xs, y, mk, ms=6, ls="none",
                     mfc="none" if action_mode == "full" else None,
                     color="#1d3557" if action_mode == "targeted" else "#e63946",
-                    label=f"{action_mode}")
+                    label="targeted" if action_mode == "targeted" else "uniform")
             ok = ~np.isnan(xs)
             if ok.sum() > 1:
                 ax.annotate("", xy=(xs[ok].min(), -0.72), xytext=(xs[ok].max(), -0.72),
