@@ -684,6 +684,22 @@ def run_random_policy(d_arg):
 
             obs = next_obs
             pbar.update(num_envs - len(envs.dead_envs))
+            # Workers segfault on reset one by one; rebuild the VecEnv once half
+            # are dead, so the run neither crawls on a few survivors nor spins
+            # forever at 0 live envs. Live envs lose their in-progress episode.
+            if 2 * len(envs.dead_envs) >= num_envs:
+                print(
+                    f"[random] {len(envs.dead_envs)}/{num_envs} envs dead — restarting VecEnv",
+                    flush=True,
+                )
+                try:
+                    envs.close()
+                except Exception:
+                    pass
+                del envs
+                envs = vec_envs(d_arg)
+                obs = envs.reset()
+                episode_returns[:] = 0.0
 
     except KeyboardInterrupt:
         print("[random] Interrupted.")
