@@ -30,7 +30,7 @@
 % ─────────────────────────────────────────────────────────────────────────────
 
 \title{\physigym{}: Bridging Agent-Based Biological Simulation and Reinforcement
-  Learning --- An Observation-Space Study on Tumor Microenvironment Control}
+  Learning, with an Observation-Space Study on Tumor Microenvironment Control}
 
 \author{%
   Alexandre Bertin$^{1,2,5,\dagger}$ \quad
@@ -152,12 +152,13 @@ number of cancer types.
 To illustrate the framework, we build a simplified TME toy model and use it as
 an end-to-end RL case study. The model also serves as a controlled testbed for
 a question that arises in any spatially explicit biological environment: among
-the observation spaces \physigym{} can expose (scalars, images, graphs), which
-ones help an RL agent learn an effective dynamic treatment regime? Image-based
-observations that preserve the spatial layout of cells and substrates outperform
-compact scalar summaries, both in cumulative return and in generalization to
-held-out spatial configurations. This finding concerns one deliberately
-simplified model. The primary contribution of this work is \physigym{}.
+the observation spaces \physigym{} can expose, which ones help an RL agent learn
+an effective dynamic treatment regime? When the agent trains on a narrow,
+structured layout, image observations that preserve the spatial layout of cells
+and substrates generalize to held-out layouts, and compact scalar summaries do
+not. When it trains on irregular layouts, the two perform alike. This finding
+concerns one deliberately simplified model. The primary contribution of this
+work is \physigym{}.
 
 \paragraph{Contributions.}
 (1)~\physigym{}: an open-source framework that bridges the \physicell{} ABM and
@@ -166,9 +167,10 @@ minimal code changes.
 (2)~A simplified TME toy model demonstrating an end-to-end RL case study in
 which an agent learns a spatial drug-delivery policy that drives the
 microenvironment toward an anti-tumoral state.
-(3)~A systematic comparison of observation spaces on the toy model, showing
-that spatially explicit (image) representations help RL learn and generalize
-better than scalar summaries.
+(3)~A systematic comparison of observation spaces on the toy model, in both
+transfer directions, showing that spatially explicit (image) representations
+protect the agent against overfitting a narrow training distribution, and that
+this advantage disappears when the training distribution is irregular.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Methods}
@@ -207,10 +209,12 @@ interpreter~\citep{rossum1995extending, psf2024extending} with \physicell{}.
 The C++ simulation loop is split into three Python-callable functions:
 \texttt{physicell\_start}, \texttt{physicell\_step}, and
 \texttt{physicell\_stop}. For most models only \texttt{physicell\_step} needs
-to be modified (e.g.\ to inject a drug). Three read functions,
-\texttt{get\_cell}, \texttt{get\_microenv}, and \texttt{get\_graph}, return
-cell positions, substrate concentration fields, and cell neighbourhood graphs
-respectively. All are implemented in \texttt{physicellmodule.cpp}.
+to be modified (e.g.\ to inject a drug). The read functions
+\texttt{get\_cell} and \texttt{get\_microenv}, implemented in
+\texttt{physicellmodule.cpp}, return cell positions and substrate concentration
+fields. The template models of \physigym{} also provide \texttt{get\_graph},
+which returns cell neighbourhood graphs. The build used for the experiments
+below does not expose it, and none of our observation modes needs it.
 
 The interface between \physicell{} and Gymnasium uses \physicell{}'s built-in
 \emph{user parameter} and \emph{custom data} constructs, configurable through
@@ -223,6 +227,20 @@ with minimal code changes.
 \physigym{} is tested on Linux, WSL, and macOS, with continuous integration via
 GitHub Actions. Documentation and tutorials are at
 \url{https://anonymous.4open.science/r/PhysiGym-76A7/man}.
+
+\paragraph{Fidelity and reproducibility.}
+We compared one run through \physigym{} with the same run in standalone
+\physicell{} (same seed and initial condition, one thread, no drug), matching
+frames at identical simulated times (Appendix~\ref{app:fidelity}). Cell counts
+agree exactly for the first $495$ simulated minutes. Positions differ by
+$7.1\times10^{-15}\,\mu$m after the first step, and this difference grows by
+approximately one order of magnitude every $45$ minutes, the signature of a
+chaotic system amplifying a rounding difference. Two standalone runs, by
+contrast, are bit-identical over $12{,}002$ frames. Across separate processes,
+single-threaded \physigym{} runs reproduce bit for bit, while runs with $8$
+OpenMP threads diverge within $60$ steps. Our results are therefore
+reproducible as distributions over seeds (curves, means, and tests), and
+individual trajectories reproduce only in single-threaded execution.
 
 Figure~\ref{fig:framework} shows the resulting dataflow.
 Listing~\ref{lst:env} gives a complete minimal environment, in which the user
@@ -366,7 +384,10 @@ The reward is a normalised tumor-suppression signal minus a weighted drug-cost p
 \end{equation}
 where $c_t$ is the alive tumor-cell count at step $t$,
 $\lambda$ is the intrinsic growth rate (from \texttt{PhysiCell\_settings.xml}),
-$d_t$ is the normalised dose spent, $w_{\text{cell}}=0.3$, and $w_{\text{dose}}=2$.
+$d_t$ is the amount of drug injected at step $t$ divided by the domain volume,
+$w_{\text{cell}}=0.3$, and $w_{\text{dose}}=2$. Because the drug fills a disc,
+$d_t$ equals the commanded dose times the fraction of the domain the disc
+covers.
 The denominator $c_{t-1}(e^{\lambda\Delta t}-1)$ is the number of new tumor cells
 expected over one step from unchecked intrinsic exponential growth, so the ratio
 measures the observed change \emph{relative to} the growth the agent had to
@@ -387,6 +408,7 @@ We train and test on two \emph{structurally distinct} spatial distributions, so 
     \item \textbf{Network-field (held-out test)}: Initial positions are sampled from a spatially correlated random field (Appendix~\ref{app:ic}), producing irregular, clustered configurations never seen during training.
 \end{itemize}
 The transfer from the simple, regular rectangle to the richer, irregular network-field is demanding. A policy that exploits the fixed strip geometry of the rectangle cannot solve the network-field, so the test return measures whether an observation space encodes \emph{transferable} structure. Figure~\ref{fig:ic_distributions} shows representative examples of both distributions.
+To quantify the shift, we describe each layout by $18$ spatial statistics (per-population centroid, per-axis spread and anisotropy, and the three inter-population centroid distances) and compute the sliced Wasserstein-2 distance between $150$ layouts of each family. The two families are at a distance of $1.27$, against $0.19\pm0.01$ between two halves of the same family split by seed.
 
 \subsection{Observation space $O$: modes compared}
 \label{sec:obs}
@@ -426,7 +448,10 @@ the microenvironment: for each alive macrophage we look up the two competing
 substrate fields at its nearest voxel and classify it as \emph{M2}
 (pro-tumoral) if $\mathrm{conc}_{\texttt{pro\_tumoral}} >
 \mathrm{conc}_{\texttt{anti\_tumoral}}$ at that voxel, and \emph{M1}
-(anti-tumoral) otherwise. The pro-/anti-tumoral balance, which is the quantity
+(anti-tumoral) otherwise. At the first observation of an episode both fields are
+still zero, the strict inequality fails, and every macrophage is labelled M1
+(Figure~\ref{fig:obs_modes}b). From the next step on, the label follows the
+fields. This one-frame artefact is present in all runs reported here. The pro-/anti-tumoral balance, which is the quantity
 the agent must reverse, thus becomes observable as a count (\texttt{scalars}
 modes) or as two spatial channels (\texttt{img} modes). Without this step it
 would remain latent in the substrate fields.
@@ -595,8 +620,7 @@ All three image modes, \texttt{img\_mc\_cells} (I1, $+33.4$),
 network-field, and their confidence intervals overlap.
 Since I1 already generalizes well, preserving the \emph{spatial layout} of cells
 is the primary driver of transfer in this toy model. The extra substrate and
-M1/M2 channels of I2/I2m do not further separate on average, though I2m gives
-the single best test return.
+M1/M2 channels of I2/I2m do not further separate on average.
 
 \paragraph{POMDP baseline and random policy.}
 \texttt{scalars\_macrophages}, which observes only M1/M2 counts and no spatial
@@ -668,8 +692,7 @@ $k$-means cluster centroids and absolute positions overfit the fixed strip
 geometry of the training layout. Once cell layout is spatially
 available, preserving the substrate fields (I2) or pre-computing the M1/M2 split
 (I2m) does not further improve average transfer over the cell-only image (I1) on
-this toy model, though the full-information mode gives the single best test
-return.
+this toy model.
 
 \paragraph{Drug aiming under geometry shift.}
 The overfit is visible in the actions of the policies. For every logged episode we compute the mean distance
@@ -826,6 +849,56 @@ training rectangle.
 
 
 
+\section{Bridge fidelity}
+\label{app:fidelity}
+
+We ran one model configuration and one seed twice: once in standalone
+\physicell{}, a process with no Python in it, and once through \physigym{},
+stepped from Python with the null action so that no drug is released. Both runs
+are single-threaded, start from the same generated initial condition, and are
+read from the same on-disk output by the same parser. The two runs do not stop
+at the same instants: \physigym{} ends a step at the first diffusion substep at
+or past $\Delta t$, so with a $0.01$-minute substep its second frame sits at
+$30.01$ simulated minutes where the standalone run's sits at $30.00$, and the
+offset accumulates. We therefore saved the standalone run on the $0.01$-minute
+grid and matched each \physigym{} frame to the standalone frame at the identical
+simulated time (Table~\ref{tab:fidelity}).
+
+\begin{table}[h]
+  \centering\small
+  \caption{\physigym{} against standalone \physicell{} (same seed, same
+    initial condition, one thread, no drug). Cell counts agree for the first
+    $34$ of $48$ compared frames and first differ at $510$ minutes. The position
+    difference starts at one unit in the last place of a double and grows by
+    approximately one order of magnitude every $45$ minutes.}
+  \label{tab:fidelity}
+  \begin{tabular}{rcc}
+    \toprule
+    $t$ (min) & cells, standalone / bridge & $\max |\Delta \text{position}|$ ($\mu$m) \\
+    \midrule
+    $0$    & $183$ / $183$ & $0$ \\
+    $15$   & $185$ / $185$ & $7.1\times10^{-15}$ \\
+    $60$   & $187$ / $187$ & $7.8\times10^{-14}$ \\
+    $120$  & $188$ / $188$ & $2.9\times10^{-13}$ \\
+    $240$  & $196$ / $196$ & $8.2\times10^{-10}$ \\
+    $360$  & $202$ / $202$ & $1.9\times10^{-7}$ \\
+    $480$  & $206$ / $206$ & $4.8\times10^{-5}$ \\
+    $510$  & $208$ / $205$ & not comparable \\
+    \midrule
+    \multicolumn{3}{l}{\emph{control:} standalone against standalone, $12{,}002$
+      frames: bit-identical} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Reproducibility across processes.}
+Two runs launched in separate processes from byte-identical settings, initial
+condition, and seed, driven by a fixed action schedule for $60$ steps ($900$
+simulated minutes), are bitwise identical in cell state and in all five
+substrate fields when single-threaded ($211$ vs.\ $211$ cells). With $8$
+OpenMP threads per run they diverge within the same $60$ steps ($215$ vs.\
+$211$ cells, $1$ of $5$ substrate fields identical).
+
 \section{Training algorithm and setup}
 \label{sec:training}
 
@@ -860,7 +933,7 @@ one worker, on the workstation above). Each \texttt{step()} runs the C++
 \physicell{} simulator step and the Python observation read-back that the bridge
 adds (Table~\ref{tab:throughput}). A single environment sustains
 ${\approx}12$--$13$ steps/s. Switching from the scalar POMDP observation to a
-full nine-channel image observation raises the per-step time by only
+full eight-channel image observation raises the per-step time by only
 ${\approx}13\%$ ($76.9\!\to\!86.3$\,ms), and the cell-only image is
 indistinguishable from the scalar mode. The observation read-back is a small
 fraction of the step, which the simulator dominates. The choice of observation

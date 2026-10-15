@@ -25,7 +25,7 @@
     % --- read functions ---
     \node[cpp, below=10mm of step, xshift=-16mm] (getcell)    {\texttt{get\_cell}};
     \node[cpp, right=4mm of getcell] (getmicro) {\texttt{get\_microenv}};
-    \node[cpp, right=4mm of getmicro] (getgraph) {\texttt{get\_graph}};
+    \node[cpp, dashed, right=4mm of getmicro] (getgraph) {\texttt{get\_graph}};
 
     % --- Python env layer ---
     \node[py, below=12mm of getmicro] (env) {\texttt{ModelPhysiCellEnv}\\{\scriptsize subclass of \texttt{CorePhysiCellEnv}}\\{\scriptsize get\_observation / get\_reward / get\_action\_space}};
@@ -36,16 +36,17 @@
     % flows
     \draw[flow] (getcell) -- (env);
     \draw[flow] (getmicro) -- (env);
-    \draw[flow] (getgraph) -- (env);
+    \draw[flow, dashed] (getgraph) -- (env);
     \draw[readback] (step.south) -- (getmicro.north);
     \draw[flow] (env) -- node[right]{\scriptsize obs, reward} (agent);
     \draw[flow] (agent.west) to[out=180,in=180] node[left,align=right]{\scriptsize action\\\scriptsize (dose,$x$,$y$,$r$)} (step.west);
   \end{tikzpicture}
   \caption{\physigym{} dataflow. The \physicell{} C++ loop is exposed to Python as
     three callables (\texttt{physicell\_start/step/stop}); only \texttt{physicell\_step}
-    is modified per model (here, to inject \texttt{drug\_1}). Three read functions
-    (\texttt{get\_cell}, \texttt{get\_microenv}, \texttt{get\_graph}) surface cell
-    positions, substrate fields, and neighbourhood graphs. A user subclasses
+    is modified per model (here, to inject \texttt{drug\_1}). Read functions
+    surface cell positions (\texttt{get\_cell}) and substrate fields
+    (\texttt{get\_microenv}). \texttt{get\_graph} (dashed) returns
+    neighbourhood graphs in the template models and is not used here. A user subclasses
     \texttt{CorePhysiCellEnv} to assemble these into a Gymnasium observation/reward,
     and any RL algorithm drives the environment through the standard
     \texttt{step}/\texttt{reset} API.}
