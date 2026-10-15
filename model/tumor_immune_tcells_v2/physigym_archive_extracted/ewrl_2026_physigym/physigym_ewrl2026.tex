@@ -592,7 +592,7 @@ rank separation), so the gap is not an artefact of seed selection
 All three image modes, \texttt{img\_mc\_cells} (I1, $+33.4$),
 \texttt{img\_mc\_cells\_substrates} (I2, $+32.7$), and the full-information
 \texttt{img\_mc\_cells\_substrates\_m1m2} (I2m, $+32.5$), generalize to the
-network-field, and the gaps among them are within one seed-standard-deviation.
+network-field, and their confidence intervals overlap.
 Since I1 already generalizes well, preserving the \emph{spatial layout} of cells
 is the primary driver of transfer in this toy model. The extra substrate and
 M1/M2 channels of I2/I2m do not further separate on average, though I2m gives
@@ -615,13 +615,6 @@ mode, although it does not generalize, still exceeds the random baseline on test
 ($\ge 0$ vs.\ $-25.3$), so these modes learn \emph{some} transferable
 structure, far less than the image modes.
 
-\paragraph{Seed variance.}
-We do not observe a systematic seed-variance advantage for any family on this
-benchmark: end-of-training test std is $5$--$11$ for the image modes and $9$ for
-S3s (Table~\ref{tab:allmodes}), and a Levene test on
-the across-seed test-return spread of the image versus spatial-scalar families is
-not significant ($W=0.67$, $p=0.42$), so we cannot reject equal dispersion. The
-POMDP baseline's low std ($2.3$) reflects a consistent failure.
 
 \subsection{The role of the M1/M2 split and spatial scalars}
 
@@ -1044,8 +1037,7 @@ Table~\ref{tab:results}, with $n=5$ seeds per mode.
 
 \paragraph{Bootstrap confidence intervals.}
 \label{app:bootstrap}
-With $n=5$ seeds the across-seed standard deviation is itself a noisy estimate.
-To quantify uncertainty on the \emph{mean} return, we resample the seeds of each
+To quantify uncertainty on the \emph{mean} return with $n=5$ seeds, we resample the seeds of each
 mode with replacement $B=10{,}000$ times, recompute the mean end-of-training
 return of each resample, and report the $2.5$th--$97.5$th percentiles as a
 $95\%$ confidence interval. The image modes' test CIs lie entirely above $+23$,
@@ -1056,27 +1048,26 @@ entirely below that of the random policy, $[-28.2,-22.8]$.
 \begin{table}[h]
   \caption{All observation modes ($n=5$ seeds each; train = rectangle,
     test = network-field), ordered by test mean. $\mu$: mean end-of-training
-    EWMA-50 return with a $95\%$ bootstrap CI ($B=10{,}000$ seed resamples);
-    $\sigma$: test standard deviation across seeds.}
+    EWMA-50 return with a $95\%$ bootstrap CI ($B=10{,}000$ seed resamples).}
   \label{tab:allmodes}
   \centering\small
   \resizebox{\linewidth}{!}{%
-  \begin{tabular}{llccc}
+  \begin{tabular}{llcc}
     \toprule
     \textbf{ID} & \textbf{Mode} &
-    \textbf{Train$_\mu$ (95\% CI)} & \textbf{Test$_\mu$ (95\% CI)} & \textbf{Test$_\sigma$} \\
+    \textbf{Train$_\mu$ (95\% CI)} & \textbf{Test$_\mu$ (95\% CI)} \\
     \midrule
-    I1    & \texttt{img\_mc\_cells}                     & $+30.8$ $[+21.3,+38.0]$ & $+33.4$ $[+23.6,+43.2]$ & 11.3 \\
-    I2    & \texttt{img\_mc\_cells\_substrates}         & $+45.3$ $[+40.5,+49.4]$ & $+32.7$ $[+28.6,+36.7]$ & 4.7 \\
-    I2m   & \texttt{img\_mc\_cells\_substrates\_m1m2}   & $+40.8$ $[+33.0,+47.3]$ & $+32.5$ $[+24.4,+40.5]$ & 9.4 \\
-    I1m   & \texttt{img\_mc\_cells\_m1m2}               & $+35.0$ $[+22.8,+45.6]$ & $+26.0$ $[+14.1,+35.2]$ & 12.4 \\
-    S5m   & \texttt{spatial\_scalars\_cells\_spatial\_no\_scalars\_substrates\_m1m2} & $+53.6$ $[+25.0,+85.1]$ & $+9.5$ $[+0.4,+17.1]$ & 9.6 \\
-    S3sm  & \texttt{spatial\_scalars\_cells\_substrates\_m1m2} & $+38.3$ $[+20.1,+65.9]$ & $+2.6$ $[-6.2,+14.0]$ & 12.1 \\
-    S3m   & \texttt{spatial\_scalars\_cells\_m1m2}      & $+41.8$ $[+19.8,+68.0]$ & $+2.5$ $[-7.6,+11.4]$ & 10.6 \\
-    S3s   & \texttt{spatial\_scalars\_cells\_substrates} & $+42.9$ $[+24.7,+58.8]$ & $-0.0$ $[-6.2,+9.1]$ & 9.1 \\
+    I1    & \texttt{img\_mc\_cells}                     & $+30.8$ $[+21.3,+38.0]$ & $+33.4$ $[+23.6,+43.2]$ \\
+    I2    & \texttt{img\_mc\_cells\_substrates}         & $+45.3$ $[+40.5,+49.4]$ & $+32.7$ $[+28.6,+36.7]$ \\
+    I2m   & \texttt{img\_mc\_cells\_substrates\_m1m2}   & $+40.8$ $[+33.0,+47.3]$ & $+32.5$ $[+24.4,+40.5]$ \\
+    I1m   & \texttt{img\_mc\_cells\_m1m2}               & $+35.0$ $[+22.8,+45.6]$ & $+26.0$ $[+14.1,+35.2]$ \\
+    S5m   & \texttt{spatial\_scalars\_cells\_spatial\_no\_scalars\_substrates\_m1m2} & $+53.6$ $[+25.0,+85.1]$ & $+9.5$ $[+0.4,+17.1]$ \\
+    S3sm  & \texttt{spatial\_scalars\_cells\_substrates\_m1m2} & $+38.3$ $[+20.1,+65.9]$ & $+2.6$ $[-6.2,+14.0]$ \\
+    S3m   & \texttt{spatial\_scalars\_cells\_m1m2}      & $+41.8$ $[+19.8,+68.0]$ & $+2.5$ $[-7.6,+11.4]$ \\
+    S3s   & \texttt{spatial\_scalars\_cells\_substrates} & $+42.9$ $[+24.7,+58.8]$ & $-0.0$ $[-6.2,+9.1]$ \\
     \midrule
-    RAND  & random policy (baseline)                    & $-18.4$ $[-21.9,-14.9]$ & $-25.3$ $[-28.2,-22.8]$ & 3.0 \\
-    POMDP & \texttt{scalars\_macrophages}               & $-20.4$ $[-28.6,-13.8]$ & $-31.8$ $[-33.4,-29.4]$ & 2.3 \\
+    RAND  & random policy (baseline)                    & $-18.4$ $[-21.9,-14.9]$ & $-25.3$ $[-28.2,-22.8]$ \\
+    POMDP & \texttt{scalars\_macrophages}               & $-20.4$ $[-28.6,-13.8]$ & $-31.8$ $[-33.4,-29.4]$ \\
     \bottomrule
   \end{tabular}}
 \end{table}
@@ -1107,12 +1098,6 @@ $+33.4$ vs.\ $+26.0$, difference not significant (Welch $p=0.40$) but TOST does
 Welch $p=0.97$, TOST $p=0.05$ (borderline). At $n=5$ the data therefore support
 ``no detectable improvement from the pre-computed split'' but do not license the
 stronger claim of statistical equivalence; more seeds would be needed to settle it.
-
-\paragraph{Seed-variance across families.}
-A Levene test (median-centred) on the across-seed test-return spread of the image
-versus spatial-scalar families is not significant ($W=0.67$, $p=0.42$), consistent
-with the main text's statement that no family shows a systematic seed-variance
-advantage on this benchmark.
 
 The numbers above are produced by \texttt{figures\_plotting/stats\_tests.py},
 which reads the same cached per-seed curves as the tables and figures.
