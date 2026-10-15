@@ -56,27 +56,26 @@
 \maketitle
 
 \begin{abstract}
-This paper presents \physigym{}, a framework that integrates agent-based
-biological simulation within standardised reinforcement learning environments.
-By connecting the agent-based modelling framework \physicell{} with the
-Gymnasium API, we provide a flexible tool for exploring RL strategies that
-control \emph{in silico} biological processes.
-We demonstrate \physigym{}'s potential through a case study on a simplified
-tumor microenvironment (TME) toy model, in which a Soft Actor-Critic agent
-learns targeted drug-delivery policies that steer the microenvironment toward an
-anti-tumoral state and, in the best episodes, drive the tumor to near-eradication.
-We further use this case study to systematically compare a family of
-observation spaces --- from a partially observed macrophage-count baseline,
-through spatial scalar summaries, to full multi-channel spatial images.
-Training on a structured rectangle layout and testing on a held-out
-network-field layout, we find that spatially explicit image observations
-generalize markedly better than scalar summaries: image modes reach a mean
-held-out test return of ${\approx}{+}32$ to $+33$, whereas spatial-scalar
-summaries train comparably ($+43$) but collapse to ${\approx}0$ out of
-distribution, and the macrophage-only POMDP baseline fails to learn at all
-($-32$). Swapping the layouts removes the gap, so the benefit of images is
-protection against overfitting a narrow training distribution. This demonstrates that \physigym{}'s flexible observation-space interface
-directly impacts policy quality and generalization in spatially structured
+We present \physigym{}, a framework that exposes agent-based biological
+simulations as standard reinforcement learning (RL) environments. It connects
+the agent-based modelling framework \physicell{} to the Gymnasium API, so that
+RL strategies can be tested on \emph{in silico} biological processes.
+We illustrate it with a simplified tumor microenvironment (TME) toy model, in
+which a Soft Actor-Critic agent learns targeted drug-delivery policies that move
+the microenvironment toward an anti-tumoral state and, in the best episodes,
+nearly eradicate the tumor.
+We use the same case study to compare a family of observation spaces, from a
+partially observed macrophage-count baseline, through spatial scalar summaries,
+to multi-channel spatial images.
+With training on a structured rectangle layout and testing on a held-out
+network-field layout, image observations generalize markedly better than scalar
+summaries. Image modes reach a mean held-out test return of
+${\approx}{+}32$ to $+33$, spatial-scalar summaries train comparably ($+43$)
+but fall to ${\approx}0$ out of distribution, and the macrophage-only POMDP
+baseline does not learn ($-32$). When the two layouts are swapped, the gap
+disappears: images protect the agent against overfitting a narrow training
+distribution. The observation space, which \physigym{} makes configurable,
+therefore determines policy quality and generalization in spatially structured
 environments.
 \physigym{} is open-source at \url{https://anonymous.4open.science/r/PhysiGym-76A7}.
 \end{abstract}
@@ -90,11 +89,10 @@ life.
 In silico modeling aims to mimic these systems, providing a controlled
 environment for exploring specific aspects of biological processes and testing
 hypotheses.
-In particular, agent-based models (ABMs) provide a powerful framework for
-simulating biological systems where agents (e.g.\ cells) interact dynamically
-based on predefined rules. These models are used in oncology and immunology to
-study emerging behaviors in complex biological systems, with the potential to
-propose novel therapeutic strategies~\citep{johnson2023digitize,
+Agent-based models (ABMs) are well suited to biological systems in which
+agents (e.g.\ cells) interact according to predefined rules. They are used in
+oncology and immunology to study emergent behaviors, and they can suggest novel
+therapeutic strategies~\citep{johnson2023digitize,
 laubenbacher2024toward, rocha2024multiscale}.
 
 Ordinary differential equations (ODEs) and agent-based models (ABMs) are widely
@@ -106,64 +104,60 @@ designing adaptive, sequential interventions requires a control framework.
 Reinforcement learning (RL), where an RL agent learns policies through
 interaction with an environment, offers such a framework~\citep{barto1989learning}.
 By modeling treatment regimes as a sequence of decisions, RL enables adaptive
-control of biological simulations~\citep{chakraborty2014dynamic}. For efficient
-experimentation and policy learning, RL further requires a standardized
-interface. To address this, we introduce \physigym{}, an interface that connects
+control of biological simulations~\citep{chakraborty2014dynamic}. Efficient
+experimentation and policy learning also require a standardized interface. We
+therefore introduce \physigym{}, an interface that connects
 \physicell{}~\citep{ghaffarizadeh2018physicell}, an ABM framework for
 multicellular simulations of tissues or cell cultures (tumor microenvironment,
 other disease tissues, or bacteria colonies), with
 Gymnasium~\citep{towers2024gymnasium}, a widely adopted RL application
 programming interface (API).
-\physicell{} enables flexible multiscale modeling of biological systems, coupled
-with a sophisticated underlying physics simulator (the BioFVM diffusion
-transport solver~\citep{ghaffarizadeh2016biofvm}), while Gymnasium provides a
-structured framework for training and evaluating RL policies.
+\physicell{} supports multiscale models of biological systems and couples them
+to the BioFVM diffusion transport solver~\citep{ghaffarizadeh2016biofvm}.
+Gymnasium provides a common structure for training and evaluating RL policies.
 
 The first implementation of RL on an ABM framework based on BioFVM was proposed
 by \citet{zade2020reinforcement}, which applied Q-learning~\citep{watkins1992q}
 to optimize Temozolomide treatment regimes for patients with glioblastoma
-multiforme, a highly specific problem.
+multiforme.
 More recently, \citet{aif2025failing} used \physicell{} as a complex
 (high-fidelity) simulation environment for tumor growth, combined with a simple
 (low-fidelity) RL training environment of coupled ordinary differential
 equations (ODE) to learn treatment strategies for solid tumors.
 
 \newpage
-Both of these efforts couple RL to a simulator for a \emph{single, fixed}
-problem: the coupling is bespoke, the observation and action spaces are hard-wired
-to the task, and the plumbing is not reusable across models. Consequently, a
-practitioner wishing to pose a different question --- a new cell type, a different
-readout, an image rather than a scalar observation --- must re-engineer the
-sim-to-RL interface each time. \physigym{}'s contribution is orthogonal and
-complementary: rather than one more problem-specific coupling, it is a
+Both studies couple RL to a simulator for a \emph{single, fixed} problem. The
+coupling is bespoke, the observation and action spaces are tied to the task, and
+the code cannot be reused for another model. A practitioner who wants to ask a
+different question (a new cell type, a different readout, an image observation in
+place of a scalar one) must re-engineer the interface between simulator and RL
+each time. \physigym{} addresses this complementary need. It is a
 \emph{general, reusable} bridge that turns \emph{any} \physicell{} model into a
 Gymnasium environment through subclassing and \physicell{}'s native user-parameter
-and custom-data constructs (Section~\ref{sec:physigym}), so the observation space,
-action space, and reward become configuration rather than re-implementation. The
-observation-space study in this paper is only possible \emph{because} the same
-underlying model can be re-exposed nine different ways without touching the
-simulator --- something a hand-rolled, single-purpose wrapper does not provide.
+and custom-data constructs (Section~\ref{sec:physigym}). Observation space,
+action space, and reward become configuration choices that require no
+re-implementation. The observation-space study in this paper depends on this
+property: the same model is exposed in nine different ways with no modification
+of the simulator.
 
 \physigym{} bridges \physicell{} and Gymnasium to provide a reproducible and
 scalable framework for integrating agent-based simulations of biological systems
-with RL strategies. In the following, we present \physigym{}'s motivation and
-design, demonstrating how it directly connects ABMs and RL to control complex
-biological systems. In particular, we focus on the tumor microenvironment, a
-biological system made up of cancer cells and surrounding immune and stromal
-cells that engage in complex interactions and cross-talks, which is proven to be
-crucial for an effective response to immunotherapy, an important therapeutic
-approach in an increasing number of types of cancer.
+with RL strategies. We present the motivation and design of \physigym{}, and
+show how it connects ABMs and RL to control complex biological systems. We focus
+on the tumor microenvironment, a biological system composed of cancer cells and
+surrounding immune and stromal cells. Their interactions are known to determine
+the response to immunotherapy, a therapeutic approach used in an increasing
+number of cancer types.
 
 To illustrate the framework, we build a simplified TME toy model and use it as
-an end-to-end RL case study. This model also serves as a controlled testbed for
-a practical question that arises in any spatially explicit biological
-environment: among the many observation spaces \physigym{} can expose (scalars,
-images, graphs), which ones help an RL agent learn an effective dynamic treatment
-regime? We find that image-based observations that preserve the spatial layout of
-cells and substrates outperform compact scalar summaries, both in cumulative
-return and in generalization to held-out spatial configurations. This is an
-application-level finding on a deliberately simplified model; the primary
-contribution of this work is \physigym{} itself.
+an end-to-end RL case study. The model also serves as a controlled testbed for
+a question that arises in any spatially explicit biological environment: among
+the observation spaces \physigym{} can expose (scalars, images, graphs), which
+ones help an RL agent learn an effective dynamic treatment regime? Image-based
+observations that preserve the spatial layout of cells and substrates outperform
+compact scalar summaries, both in cumulative return and in generalization to
+held-out spatial configurations. This finding concerns one deliberately
+simplified model. The primary contribution of this work is \physigym{}.
 
 \paragraph{Contributions.}
 (1)~\physigym{}: an open-source framework that bridges the \physicell{} ABM and
@@ -204,19 +198,19 @@ In our setting the agent never sees the full simulator state (every cell's
 position and internal variables, every voxel's substrate concentrations); it
 receives an observation $o_t = f(s_t)$ from an observation space $O$ chosen by the
 user, so the control problem is formally a partially observed MDP (POMDP). The
-observation map $f$ is exactly what we vary in Section~\ref{sec:obs}.
+observation map $f$ is the component we vary in Section~\ref{sec:obs}.
 Gymnasium~\citep{towers2024gymnasium} is the standard Python interface for MDPs,
-promoting modularity and code reuse across algorithms and environments.
+and it promotes modularity and code reuse across algorithms and environments.
 
 \physigym{} connects these two ecosystems by extending the Python
 interpreter~\citep{rossum1995extending, psf2024extending} with \physicell{}.
 The C++ simulation loop is split into three Python-callable functions:
 \texttt{physicell\_start}, \texttt{physicell\_step}, and
 \texttt{physicell\_stop}. For most models only \texttt{physicell\_step} needs
-to be modified (e.g.\ to inject a drug). Three read functions 
-\texttt{get\_cell}, \texttt{get\_microenv}, and \texttt{get\_graph} --- return
+to be modified (e.g.\ to inject a drug). Three read functions,
+\texttt{get\_cell}, \texttt{get\_microenv}, and \texttt{get\_graph}, return
 cell positions, substrate concentration fields, and cell neighbourhood graphs
-respectively; all are implemented in \texttt{physicellmodule.cpp}.
+respectively. All are implemented in \texttt{physicellmodule.cpp}.
 
 The interface between \physicell{} and Gymnasium uses \physicell{}'s built-in
 \emph{user parameter} and \emph{custom data} constructs, configurable through
@@ -230,10 +224,10 @@ with minimal code changes.
 GitHub Actions. Documentation and tutorials are at
 \url{https://anonymous.4open.science/r/PhysiGym-76A7/man}.
 
-Figure~\ref{fig:framework} shows the resulting dataflow, and
-Listing~\ref{lst:env} gives a complete minimal environment: a user overrides
-only the observation, action, and reward, while the base class handles the
-\physicell{} start/step/stop loop and all Gymnasium bookkeeping.
+Figure~\ref{fig:framework} shows the resulting dataflow.
+Listing~\ref{lst:env} gives a complete minimal environment, in which the user
+overrides only the observation, action, and reward, and the base class handles
+the \physicell{} start/step/stop loop.
 
 \input{fig_framework}
 \input{listing_env}
@@ -245,40 +239,37 @@ only the observation, action, and reward, while the base class handles the
 
 We developed a simplified tumor microenvironment (TME) \emph{toy model} to
 illustrate the potential uses of \physigym{}. The model is deliberately small
-and computationally cheap so that we can train RL agents to convergence many
-times over (across observation spaces and seeds), while still retaining the
-spatial, multicellular, and chemically coupled structure that distinguishes
-agent-based models (ABMs) from ODE surrogates. It includes three cell types, 
-five diffusible substrates, and a set of simple agent-based rules. This toy 
-model highlights how the RL framework can control tumor progression by 
-modulating the whole microenvironment, rather than solely targeting cancer-cell killing.
+and computationally cheap, so that RL agents can be trained to convergence many
+times (across observation spaces and seeds). It keeps the spatial,
+multicellular, and chemically coupled structure that distinguishes agent-based
+models (ABMs) from ODE surrogates. It includes three cell types, five diffusible
+substrates, and a set of simple agent-based rules. The agent controls tumor
+progression by modulating the whole microenvironment, and it has no means of
+killing cancer cells directly.
 
 \paragraph{Domain and Dynamics.}
 The continuous-space environment is simulated on a $64 \times 64\,\mu\text{m}$ 2D domain. 
 The RL gym step interval is $\Delta t = 15$\,min, with episodes running up to 
 $10{,}080$\,min (7 simulated days).
 
-\paragraph{Entity Dynamics \& The Control Challenge.}
-The environment formulates a highly non-linear, indirect control problem. 
-The agent's action (deploying a localized therapeutic, \texttt{drug\_1}) has 
-zero direct cytotoxicity. Instead, the agent must learn to manipulate the 
-environment's underlying transition dynamics by reversing a spatial immunosuppression 
-loop. The system comprises three interacting cellular populations whose movements 
-are governed by biochemical spatial gradients (chemotaxis):
+\paragraph{Cell populations and control problem.}
+The control problem is highly non-linear and indirect.
+The agent's action (deploying a localized therapeutic, \texttt{drug\_1}) has
+zero direct cytotoxicity. The agent must learn to modify the transition dynamics
+of the environment by reversing a spatial immunosuppression loop. Three
+interacting cell populations move along biochemical gradients (chemotaxis):
 
 \begin{itemize}
-    \item \textbf{Tumor Cells (The Target):} Immobile entities that continuously divide. 
-    They actively modify the environment by secreting a chemical signal 
-    (\texttt{tumor\_molecule}) that suppresses the local immune system.
-    
-    \item \textbf{Macrophages (The Mediators):} Mobile, immortal entities that 
-    navigate toward the tumor. They exhibit state-dependent behavior: the tumor's 
-    chemical signal successfully ``hijacks'' them, transforming them from an 
-    anti-tumoral to a pro-tumoral state.
-    
-    \item \textbf{T-cells (The Effectors):} Mobile, immortal entities capable of 
-    triggering tumor apoptosis. However, their spatial navigation is strongly 
-    repelled by the presence of pro-tumoral macrophages.
+    \item \textbf{Tumor cells (target):} immobile cells that divide continuously.
+    They secrete a chemical signal (\texttt{tumor\_molecule}) that suppresses
+    the local immune response.
+
+    \item \textbf{Macrophages (mediators):} mobile, immortal cells that migrate
+    toward the tumor. Their behavior depends on their state: the tumor's
+    chemical signal converts them from an anti-tumoral to a pro-tumoral state.
+
+    \item \textbf{T-cells (effectors):} mobile, immortal cells that can trigger
+    tumor apoptosis. Pro-tumoral macrophages strongly repel them.
 \end{itemize}
 
 The mechanism is a simplified abstraction of \emph{macrophage-repolarising
@@ -295,17 +286,15 @@ TAM-repolarising agent: a locally delivered immunomodulator with no direct
 cytotoxicity. We use this mechanism qualitatively; the rates in the toy model are
 not fit to any of these studies (see Limitations).
 
-This setup creates a hostile, self-reinforcing feedback loop: the tumor protects 
-itself by converting macrophages, which in turn dynamically block T-cells from 
-reaching the target. As illustrated in Figure~\ref{fig:tme_network}, the RL agent 
-must maximize reward by learning to precisely deploy its drug to ``re-program'' 
-the macrophages back to an anti-tumoral state. This spatial intervention remodels 
-the chemical gradients, clearing a path for T-cells to navigate to the tumor 
-and execute their killing function.
+The result is a self-reinforcing feedback loop: the tumor protects itself by
+converting macrophages, which then block T-cells from reaching it. As
+illustrated in Figure~\ref{fig:tme_network}, the agent maximizes reward by
+learning where to deploy the drug so that it re-programs macrophages to an
+anti-tumoral state. This intervention modifies the chemical gradients and opens
+a path for T-cells to reach the tumor and kill it.
 
 \begin{figure}[htbp]
     \centering
-    % Scales the image to 90% of the text width to ensure it fits beautifully within the margins
     \includegraphics[width=1.1\linewidth]{img/fig_tme}
     \caption{Tumor Microenvironment (TME) signalling network. Green solid arrows denote production, activation, or attraction, while red solid arrows indicate suppression or repulsion. The dashed pathways represent the intervention of the agent-controlled drug (\texttt{drug\_1}), highlighting its role as an immune-modulator that repolarizes macrophages to indirectly drive T-cell mediated tumor apoptosis.}
     \label{fig:tme_network}
@@ -315,14 +304,13 @@ and execute their killing function.
 \subsection{Implementation of an RL approach to control the TME}
 \label{sec:rl}
 
-Our overall objective is to achieve complete tumor eradication while minimizing
-drug exposure. We describe the action space $A$, the reward $R$, and the
-training and test distributions. The observation space $S$ is the component we
-vary across experiments: in Section~\ref{sec:results} we compare a family of
-observation modes --- spanning a partially observed scalar baseline, spatial
-scalar summaries, and multi-channel spatial images --- to assess whether
-spatially explicit representations help the agent learn and generalize on this
-toy model.
+Our objective is complete tumor eradication with minimal drug exposure. We
+describe the action space $A$, the reward $R$, and the training and test
+distributions. The observation space $S$ is the component we vary across
+experiments. Section~\ref{sec:results} compares a family of observation modes,
+from a partially observed scalar baseline through spatial scalar summaries to
+multi-channel spatial images, to assess whether spatially explicit
+representations help the agent learn and generalize on this toy model.
 
 We train every configuration with Soft Actor-Critic
 (SAC)~\citep{haarnoja2018soft}, using an asynchronous parallel implementation
@@ -340,8 +328,7 @@ report is the exponentially weighted mean (span $50$) over the last test
 episodes at the end of training. Each observation mode is trained with $n=5$
 independent training seeds, and all uncertainty statements aggregate over these
 seeds (bootstrap CIs, Appendix~\ref{app:bootstrap}; significance tests,
-Appendix~\ref{app:stats}). The test result is therefore not a single test seed
-or a single held-out layout.
+Appendix~\ref{app:stats}).
 
 \paragraph{Action space.}
 At each gym step the agent selects
@@ -368,22 +355,21 @@ overcome. This makes the tumor term scale-free in the absolute cell count and
 comparable across initial conditions with different tumor sizes: a value of $+1$
 means one step's worth of expected growth was fully cancelled, independent of how
 many cells were present.
-Raising the dose weight from $1$ to $2$ relative to earlier experiments
-strengthens the pressure to spend drug sparingly, so the agent is rewarded
-for converting each unit of dose into effective macrophage repolarisation
-rather than for blanket dosing. The $d_t$ term penalises drug use directly,
-keeping the learning signal clean without conflating temporal dosing strategy
-with total exposure.
+Relative to earlier experiments, the dose weight is raised from $1$ to $2$.
+This penalises blanket dosing more strongly and rewards the conversion of each
+unit of dose into macrophage repolarisation. Because the $d_t$ term penalises
+drug use directly, total exposure stays separate from the temporal dosing
+strategy in the learning signal.
 
 \subsubsection*{Training and Test Distributions}
 \label{sec:distributions}
 
-To ensure the model learns robust policies rather than overfitting to specific spatial configurations, we train and test on two \emph{structurally distinct} spatial distributions, so that test performance measures out-of-distribution (OOD) generalisation rather than memorisation of the training geometry:
+We train and test on two \emph{structurally distinct} spatial distributions, so that test performance measures out-of-distribution (OOD) generalisation to an unseen geometry:
 \begin{itemize}
     \item \textbf{Rectangle (training)}: Each cell type is placed uniformly in a narrow vertical strip, with non-overlapping strip positions (Appendix~\ref{app:ic}). This is a highly structured, low-entropy layout.
     \item \textbf{Network-field (held-out test)}: Initial positions are sampled from a spatially correlated random field (Appendix~\ref{app:ic}), producing irregular, clustered configurations never seen during training.
 \end{itemize}
-Training on the simple, regular rectangle layout and testing on the richer, irregular network-field is a demanding transfer: a policy that merely exploits the fixed strip geometry of the rectangle cannot solve the network-field, so the test return isolates whether an observation space encodes \emph{transferable} structure. Figure~\ref{fig:ic_distributions} illustrates representative examples of both distributions.
+The transfer from the simple, regular rectangle to the richer, irregular network-field is demanding. A policy that exploits the fixed strip geometry of the rectangle cannot solve the network-field, so the test return measures whether an observation space encodes \emph{transferable} structure. Figure~\ref{fig:ic_distributions} shows representative examples of both distributions.
 
 \subsection{Observation space $O$: modes compared}
 \label{sec:obs}
@@ -392,13 +378,11 @@ In a tumor microenvironment there are different cell types and different
 molecules/chemical compounds (substrates). The simulator can expose several
 kinds of data: some carry explicit spatial information, others are spaceless
 summaries (e.g.\ a small vector of global statistics). Because \physigym{}
-can build all of these from the same underlying simulation, we use the toy model
-to study how the choice of observation space affects the dynamic treatment regime
-that RL learns, comparing nine modes on cumulative return and on generalization to
+can build all of these from the same simulation, we use the toy model to study
+how the choice of observation space affects the dynamic treatment regime that RL
+learns. We compare nine modes, from a partially observed scalar baseline to
+multi-channel spatial images, on cumulative return and on generalization to
 unseen spatial configurations.
-
-We compare observation modes spanning a spectrum from a partially observed
-scalar baseline to full multi-channel spatial images.
 Let $N_c=3$ (tumor, T-cell, macrophage) and $N_s=5$ substrates.
 Several modes optionally split the macrophage population into its
 \emph{M1} (anti-tumoral) and \emph{M2} (pro-tumoral) polarisation states, which
@@ -411,21 +395,21 @@ the microenvironment: for each alive macrophage we look up the two competing
 substrate fields at its nearest voxel and classify it as \emph{M2}
 (pro-tumoral) if $\mathrm{conc}_{\texttt{pro\_tumoral}} >
 \mathrm{conc}_{\texttt{anti\_tumoral}}$ at that voxel, and \emph{M1}
-(anti-tumoral) otherwise. This makes the pro-/anti-tumoral balance --- the very
-quantity the agent must flip --- observable as a count (\texttt{scalars} modes)
-or as two spatial channels (\texttt{img} modes), rather than leaving it latent
-in the substrate fields.
+(anti-tumoral) otherwise. The pro-/anti-tumoral balance, which is the quantity
+the agent must reverse, thus becomes observable as a count (\texttt{scalars}
+modes) or as two spatial channels (\texttt{img} modes). Without this step it
+would remain latent in the substrate fields.
 
 \subsubsection*{Scalar Observation Spaces}
 
 \paragraph{\texttt{scalars\_macrophages} (POMDP baseline):}
 Alive count per cell type, with the macrophage slot split into M1 and M2 counts;
 each is normalised to the initial population ($s = c/c_{\text{init}} - 1$).
-This mode exposes only \emph{how many} macrophages are polarised each way and
-carries no spatial information at all --- neither cell positions nor substrate
-maps. It is therefore a strongly partially observed (POMDP) baseline: the true
-state that governs the transition dynamics (where cells and gradients are) is
-hidden, and the agent must act on an aggressively compressed summary.
+This mode exposes only \emph{how many} macrophages are polarised each way. It
+contains no spatial information: neither cell positions nor substrate maps.
+It is therefore a strongly partially observed (POMDP) baseline. The state
+variables that govern the transition dynamics (positions of cells and gradients)
+are hidden, and the agent acts on a heavily compressed summary.
 \\ \textit{Space:} $\mathbb{R}^{N_c + 1}$
 
 \paragraph{\texttt{spatial\_scalars\_cells\_substrates}:}
@@ -463,24 +447,24 @@ spatial feedback on drug distribution and the polarising factors.
 
 \paragraph{\texttt{img\_mc\_cells\_substrates\_m1m2} (full information):}
 I2 with the additional M1/M2 macrophage channels. This mode carries every
-signal the others expose --- cell positions, substrate fields, and the explicit
-polarisation split --- and serves as the near-fully-observed upper reference
-against which the compressed modes are compared.
+signal the others expose (cell positions, substrate fields, and the explicit
+polarisation split) and serves as the near-fully-observed reference for the
+compressed modes.
 \\ \textit{Space:} $\mathbb{R}^{(N_c + N_s + 2) \times 64 \times 64}$ (\texttt{uint8})
 
 \subsubsection*{An observability spectrum}
 
-Together these modes trace an observability spectrum, from
-\texttt{scalars\_macrophages} --- a POMDP that sees only polarisation counts --- to
+Together these modes form an observability spectrum, from
+\texttt{scalars\_macrophages}, a POMDP that sees only polarisation counts, to
 \texttt{img\_mc\_cells\_substrates\_m1m2}, which spatially resolves every state
 variable relevant to the control problem. The indirect drug mechanism
 (Section~\ref{sec:model}) requires multi-step credit assignment: the agent
 injects drug, macrophages repolarise over several steps, anti-tumoral gradients
 shift, T-cells migrate, and only then do tumor cells die. Scalar summaries
 cannot tell the agent whether an injection reached macrophages, whether
-polarisation occurred, or where T-cells will concentrate next; only the
-per-pixel substrate and M1/M2 channels of the image modes make the polarisation
-state and drug distribution spatially legible at each step.
+polarisation occurred, or where T-cells will concentrate next. The per-pixel
+substrate and M1/M2 channels of the image modes show the polarisation state and
+the drug distribution in space at each step.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Results}
@@ -502,7 +486,7 @@ vs.\ cumulative environment steps with mean $\pm$ std shading across seeds.
     This is the curated main set; the remaining \texttt{m1m2} scalar variants
     appear in Appendix~\ref{app:allmodes}.
     RAND is a random-action policy ($5$ seeds), included as a learning-free
-    reference: modes below it fail to beat random behaviour.}
+    reference: modes below it do no better than random behaviour.}
   \label{tab:results}
   \centering\small
   \resizebox{\linewidth}{!}{%
@@ -533,7 +517,7 @@ vs.\ cumulative environment steps with mean $\pm$ std shading across seeds.
     All modes learn on the training layout except the
     \texttt{scalars\_macrophages} POMDP baseline, which flatlines near $-20$.
     Spatial-scalar summaries (S3s) train as fast as, or faster than, the image
-    modes here --- the separation only appears out of distribution
+    modes here. The separation appears only out of distribution
     (Figure~\ref{fig:test_curves}).}
   \label{fig:train_curves}
 \end{figure}
@@ -545,8 +529,8 @@ vs.\ cumulative environment steps with mean $\pm$ std shading across seeds.
     training on rectangle (left) and test on network-field (right).
     Inter-seed variability is broadly comparable across the learning modes and
     fluctuates over training, so we do not claim a systematic variance
-    advantage for any single family; the POMDP baseline has the lowest test
-    variance simply because it converges to a uniformly poor policy.
+    advantage for any single family. The POMDP baseline has the lowest test
+    variance because it converges to a uniformly poor policy.
     At end of training the image modes reach test return ${\approx}{+}33$ with
     std ${\approx}5$--$11$ (Table~\ref{tab:allmodes}).}
   \label{fig:std_curves}
@@ -557,29 +541,27 @@ vs.\ cumulative environment steps with mean $\pm$ std shading across seeds.
   \includegraphics[width=\linewidth]{img/test_return_mean50.pdf}
   \caption{Held-out test return on the network-field layout (mean $\pm 1\sigma$
     across seeds, EWMA-50) vs.\ cumulative simulator steps.
-    The image modes (I2m, I2, I1) climb steadily to ${\approx}{+}33$, whereas
-    the spatial-scalar summary (S3s) --- which trained \emph{best}
-    (Figure~\ref{fig:train_curves}) --- collapses to ${\approx}0$, revealing that
-    it overfits the fixed rectangle geometry rather than learning transferable
-    structure. The dashed line marks the random-policy baseline (test
-    ${\approx}{-}25$, shaded $\pm 1\sigma$); the \texttt{scalars\_macrophages}
-    POMDP baseline tracks at or below it throughout, i.e.\ never beats random.
-    Generalization, not training fit, is where spatially explicit observations
-    separate from scalar summaries.}
+    The image modes (I2m, I2, I1) climb steadily to ${\approx}{+}33$. The
+    spatial-scalar summary (S3s), which trained as well as the image modes
+    (Figure~\ref{fig:train_curves}), falls to ${\approx}0$: it has overfit the
+    fixed rectangle geometry. The dashed line marks the random-policy baseline
+    (test ${\approx}{-}25$, shaded $\pm 1\sigma$). The
+    \texttt{scalars\_macrophages} POMDP baseline stays at or below it
+    throughout, i.e.\ never beats random.}
   \label{fig:test_curves}
 \end{figure}
 
 \subsection{Key findings}
 
-\paragraph{Generalization, not training fit, separates the modes.}
+\paragraph{Separation under distribution shift.}
 On the training rectangle layout the spatial-scalar summary S3s is fully
-competitive --- its training return ($+42.9$) is on par with the best image mode
-I2 ($+45.3$). The distinction appears only out of distribution: on the held-out
+competitive: its training return ($+42.9$) is on par with the best image mode
+I2 ($+45.3$). The modes separate only out of distribution. On the held-out
 network-field, the three image modes retain ${\approx}{+}32$ to $+33$ test
-return, while S3s collapses to $-0.0$. Training fit alone would have ranked the
-scalar summary among the best; only the OOD test reveals that it has overfit the
-fixed strip geometry of the rectangle. This separation is statistically
-supported: the image modes' $95\%$ bootstrap confidence intervals on the mean
+return, while S3s falls to $-0.0$. Ranked on training fit alone, the scalar
+summary would appear among the best modes. The OOD test shows that it has
+overfit the fixed strip geometry of the rectangle. This separation is
+statistically supported: the image modes' $95\%$ bootstrap confidence intervals on the mean
 test return lie entirely above $+23$ and do not overlap those of any
 spatial-scalar mode, all of which contain zero (Table~\ref{tab:results};
 all nine modes in Appendix~\ref{app:bootstrap}).
@@ -589,41 +571,40 @@ $U$-test $p=6\times10^{-7}$ and a Cliff's $\delta=+0.97$ (near-complete
 rank separation), so the gap is not an artefact of seed selection
 (Appendix~\ref{app:stats}).
 
-\paragraph{Spatially explicit observations transfer; scalar summaries do not.}
-All three image modes --- \texttt{img\_mc\_cells} (I1, $+33.4$),
+\paragraph{Transfer of image observations.}
+All three image modes, \texttt{img\_mc\_cells} (I1, $+33.4$),
 \texttt{img\_mc\_cells\_substrates} (I2, $+32.7$), and the full-information
-\texttt{img\_mc\_cells\_substrates\_m1m2} (I2m, $+32.5$) --- generalize to the
+\texttt{img\_mc\_cells\_substrates\_m1m2} (I2m, $+32.5$), generalize to the
 network-field, and the gaps among them are within one seed-standard-deviation.
-That I1 already generalizes well indicates that, in this toy model, preserving
-the \emph{spatial layout} of cells is the primary driver of transfer; the extra
-substrate and M1/M2 channels of I2/I2m do not further separate on average,
-though I2m gives the single best test return.
+Since I1 already generalizes well, preserving the \emph{spatial layout} of cells
+is the primary driver of transfer in this toy model. The extra substrate and
+M1/M2 channels of I2/I2m do not further separate on average, though I2m gives
+the single best test return.
 
-\paragraph{The POMDP baseline is no better than acting randomly.}
+\paragraph{POMDP baseline and random policy.}
 \texttt{scalars\_macrophages}, which observes only M1/M2 counts and no spatial
-information, fails to improve on either distribution (train $-20.4$, test
-$-31.8$) --- and, crucially, does \emph{not} beat a random-action policy
+information, does not improve on either distribution (train $-20.4$, test
+$-31.8$) and does \emph{not} beat a random-action policy
 (train $-18.4$, test $-25.3$; RAND in Table~\ref{tab:results}). Its test return
-is if anything below random, and the two bootstrap CIs barely overlap
-($[-33.4,-29.4]$ vs.\ $[-28.2,-22.8]$, Table~\ref{tab:results}): the
-macrophage-count signal is not merely
-uninformative but actively misleading, steering dosing worse than chance.
+is, if anything, below random, and the two bootstrap CIs do not overlap
+($[-33.4,-29.4]$ vs.\ $[-28.2,-22.8]$, Table~\ref{tab:results}). The
+macrophage-count signal is therefore misleading as well as uninformative: it
+steers dosing worse than chance.
 Knowing \emph{how many} macrophages are polarised without knowing \emph{where}
 the drug, cells, and gradients are is insufficient to solve the indirect,
-spatially mediated control problem --- a concrete illustration of how
-observation-space choice can render an otherwise learnable task effectively
-unlearnable. By contrast, every spatial-scalar mode, though it fails to
-generalize, still clears the random baseline on test ($\ge 0$ vs.\ $-25.3$),
-confirming they learn \emph{some} transferable structure --- just far less than
-the image modes.
+spatially mediated control problem. The choice of observation space can thus
+make an otherwise learnable task effectively unlearnable. Every spatial-scalar
+mode, although it does not generalize, still exceeds the random baseline on test
+($\ge 0$ vs.\ $-25.3$), so these modes learn \emph{some} transferable
+structure, far less than the image modes.
 
-\paragraph{On seed robustness.}
+\paragraph{Seed variance.}
 We do not observe a systematic seed-variance advantage for any family on this
 benchmark: end-of-training test std is $5$--$11$ for the image modes and $9$ for
 S3s (Table~\ref{tab:allmodes}, Figure~\ref{fig:std_curves}), and a Levene test on
 the across-seed test-return spread of the image versus spatial-scalar families is
 not significant ($W=0.67$, $p=0.42$), so we cannot reject equal dispersion. The
-POMDP baseline's low std ($2.3$) reflects consistent failure rather than robustness.
+POMDP baseline's low std ($2.3$) reflects a consistent failure.
 
 \subsection{The role of the M1/M2 split and spatial scalars}
 
@@ -632,60 +613,56 @@ lets us isolate the effect of the explicit M1/M2 polarisation split. Adding it
 to the cell image (I1$\to$\texttt{img\_mc\_cells\_m1m2}) does not improve
 average OOD test return ($+33.4\to+26.0$; the difference is not significant,
 Welch $p=0.40$ at $n=5$), and adding it on top of the full image
-(I2$\to$I2m) leaves it essentially unchanged ($+32.7\to+32.5$). We stop short
-of calling the split \emph{redundant}: with only five seeds an equivalence test
-(TOST, margin $\pm10\approx1\sigma$) does not confirm equivalence for either pair,
-so the honest statement is that the pre-computed split yields \emph{no detectable
-improvement} on this toy model rather than a proven null effect
-(Appendix~\ref{app:stats}). A plausible mechanism is that, once the substrate
-fields are spatially available, the CNN can already read out polarisation from the
-\texttt{pro\_tumoral}/\texttt{anti\_tumoral} channels. Among the spatial-scalar modes, none
-generalize (all within $[-0.0,+9.5]$ test return) regardless of whether they
-carry the M1/M2 split or spatially resolved substrate summaries --- the common
-failure is the loss of per-cell spatial layout, which the $k$-means summaries do
-not preserve.
+(I2$\to$I2m) leaves it essentially unchanged ($+32.7\to+32.5$). With only five
+seeds, an equivalence test (TOST, margin $\pm10\approx1\sigma$) does not confirm
+equivalence for either pair. The data therefore show \emph{no detectable
+improvement} from the pre-computed split on this toy model, and do not prove a
+null effect (Appendix~\ref{app:stats}). A plausible mechanism is that, once the
+substrate fields are spatially available, the CNN can already read polarisation
+from the \texttt{pro\_tumoral}/\texttt{anti\_tumoral} channels. None of the
+spatial-scalar modes generalize (all within $[-0.0,+9.5]$ test return), whether
+they carry the M1/M2 split or spatially resolved substrate summaries. Their
+common failure is the loss of per-cell spatial layout, which the $k$-means
+summaries do not preserve.
 
 Appendix~\ref{app:episodes} shows a matched example episode comparing an image
 mode, a spatial-scalar mode, and the POMDP baseline rolled out from an identical
-network-field initial condition, illustrating the failure mode that summarises
-the comparison: without a spatially explicit representation the agent cannot
-target the drug precisely enough to convert dose into effective macrophage
-repolarisation on an unseen layout --- the image mode reaches near-eradication
-($3$ tumor cells) while the scalar and POMDP modes leave $70$ and $130$ cells
-respectively.
+network-field initial condition. Without a spatially explicit representation,
+the agent cannot target the drug precisely enough to convert dose into
+macrophage repolarisation on an unseen layout. The image mode reaches
+near-eradication ($3$ tumor cells), while the scalar and POMDP modes leave $70$
+and $130$ cells respectively.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Discussion}
 % ─────────────────────────────────────────────────────────────────────────────
 
-The central outcome of this work is \physigym{} itself: a framework that lets
-RL agents control a full agent-based TME through a standardised interface,
-without recompilation, and with arbitrary observation and action spaces. The
-toy-model case study shows the framework end-to-end --- an agent learns a spatial
-drug-delivery policy that steers the microenvironment toward an anti-tumoral
-state and, in the best episodes, drives the tumor to near-eradication
+The central outcome of this work is \physigym{}: a framework that lets RL agents
+control a full agent-based TME through a standardised interface, without
+recompilation, and with arbitrary observation and action spaces. The toy-model
+case study shows the framework end-to-end. An agent learns a spatial
+drug-delivery policy that moves the microenvironment toward an anti-tumoral
+state and, in the best episodes, nearly eradicates the tumor
 ($3$ of $124$ tumor cells left in the matched held-out episode of
 Appendix~\ref{app:episodes}).
 
-The toy model also produces a clear result on observation spaces, and crucially
-one that only surfaces under distribution shift. On the training rectangle
-layout, spatial-scalar summaries are fully competitive with image observations;
-it is on the held-out network-field that spatially explicit (image)
-observations pull ahead, generalizing to ${\approx}{+}33$ test return while the
-scalar summaries collapse to ${\approx}0$. The CNN in the image modes can
+The toy model also gives a clear result on observation spaces, which appears
+only under distribution shift. On the training rectangle layout, spatial-scalar
+summaries are fully competitive with image observations. On the held-out
+network-field, image observations generalize to ${\approx}{+}33$ test return
+while the scalar summaries fall to ${\approx}0$. The CNN in the image modes can
 compute cross-channel co-localisation statistics (e.g.\ whether \texttt{drug\_1}
-and macrophages overlap at the same location) directly from the pixel layout
-statistics that transfer across geometries --- whereas scalar modes that encode
+and macrophages overlap at the same location) directly from the pixel layout,
+and these statistics transfer across geometries. Scalar modes that encode
 $k$-means cluster centroids and absolute positions overfit the fixed strip
-geometry of the training layout. Notably, once cell layout is spatially
+geometry of the training layout. Once cell layout is spatially
 available, preserving the substrate fields (I2) or pre-computing the M1/M2 split
 (I2m) does not further improve average transfer over the cell-only image (I1) on
 this toy model, though the full-information mode gives the single best test
 return.
 
-\paragraph{The overfit is a drug-aiming failure, measurable in the actions.}
-The claim above is not merely architectural: it is visible directly in the
-policies' behaviour. For every logged episode we compute the mean distance
+\paragraph{Drug aiming under geometry shift.}
+The overfit is visible in the actions of the policies. For every logged episode we compute the mean distance
 between the drug-injection centre (\texttt{action\_x}, \texttt{action\_y}) and
 the tumour centroid (from the episode initial conditions), averaged over the
 steps on which a dose is actually applied, and compare this aiming error between
@@ -693,15 +670,14 @@ the training rectangle and the held-out network-field
 (Fig.~\ref{fig:aiming_transfer}). On the training layout all six modes aim
 equally well (mean normalised error ${\approx}0.34$--$0.36$ for both families).
 Under the geometry shift, image modes hold their aim or slightly improve it
-(I2: $0.359\!\to\!0.343$; I2m: $0.352\!\to\!0.333$), whereas every scalar mode's
-aim \emph{degrades} (S3s: $0.341\!\to\!0.414$; S3m: $0.348\!\to\!0.406$) and its
-step-to-step variance roughly doubles. In other words, the scalar policies learn
-\emph{where} the rectangle tumour tends to sit rather than \emph{how to find} the
-tumour, so when the network-field moves it they inject into empty tissue; the
+(I2: $0.359\!\to\!0.343$; I2m: $0.352\!\to\!0.333$), whereas the aim of every
+scalar mode \emph{degrades} (S3s: $0.341\!\to\!0.414$; S3m: $0.348\!\to\!0.406$)
+and its step-to-step variance roughly doubles. The scalar policies have learned
+\emph{where} the rectangle tumour usually lies, and not \emph{how to locate} the
+tumour. When the network-field moves it, they inject into empty tissue, and the
 median final tumour count on test rises accordingly (image ${\approx}73$--$99$
-vs.\ scalar $107$--$136$). This is the concrete mechanism behind the aggregate
-return gap: the generalisation failure is an aiming failure induced by
-position-absolute features.
+vs.\ scalar $107$--$136$). The aggregate return gap thus results from an aiming
+failure induced by position-absolute features.
 
 \begin{figure}[t]
   \centering
@@ -712,12 +688,12 @@ position-absolute features.
     across-episode standard deviation. On the training rectangle (blue) image
     and scalar observations aim equally well. On the held-out network-field
     (red) image modes retain their aim while every scalar mode degrades with
-    markedly higher variance, exposing the overfit as a failure to re-target the
-    tumour rather than a loss of dosing ability.}
+    markedly higher variance. The overfit is a failure to re-target the tumour,
+    and the scalar modes keep their ability to dose.}
   \label{fig:aiming_transfer}
 \end{figure}
 
-\paragraph{Reverse direction: the advantage depends on the training distribution.}
+\paragraph{Reverse direction.}
 \label{sec:reverse}
 To check that the network-field is not simply an easier test layout, we repeated
 the study with the roles swapped (train on network-field, test on rectangle) and
@@ -729,46 +705,44 @@ direction the return advantage disappears ($7/15$ pairs, $\Delta=-6.5$,
 $[-16.9,+4.2]$, $p=0.70$), and the scalar modes also keep their drug aim under
 the shift (aiming degradation $+0.008$ against $+0.049$ in the forward direction).
 Image modes still fit the critic better in both directions (TD residual lower in
-$13/13$ and $15/15$ pairs). We read this as follows: trained on the irregular
-network-field, scalar agents cannot memorise a fixed strip position and are forced to use
+$13/13$ and $15/15$ pairs). Our interpretation is that scalar agents trained on
+the irregular network-field cannot memorise a fixed strip position and must use
 their spatial features, which then transfer. Spatially explicit observations
-therefore do not generalise better in every setting. They make the agent robust
-when the training distribution is narrow and structured, which is common in
-practice (few, stereotyped training geometries), and that is when the choice of
-observation space matters.
+therefore make the agent robust when the training distribution is narrow and
+structured, a frequent situation in practice (few, stereotyped training
+geometries). With an irregular training distribution, they give no return
+advantage in this study.
 
-We emphasise that this is an application-level observation on a deliberately
-simplified model, not a universal claim about biological control. In more
-complex or realistic models --- or with different reward designs, action spaces,
-or RL algorithms --- the relative value of cell versus substrate, and scalar
-versus image, may differ. \physigym{} is precisely the tool that makes such
+These observations concern one deliberately simplified model of biological
+control. In more complex or realistic models, or with different reward designs,
+action spaces, or RL algorithms, the relative value of cell versus substrate,
+and of scalar versus image, may differ. \physigym{} is designed to make such
 questions answerable in a reproducible way.
 
 \paragraph{Limitations.}
 The toy model is intentionally small (64\,$\mu$m, 2D) and cheap to simulate.
 Scaling to 3D or larger domains will increase the cost of image observations.
 All experiments use a single RL algorithm (SAC) with one network size per
-observation family and one reward setting; alternative algorithms, model-based
+observation family and one reward setting. Alternative algorithms, model-based
 methods, other reward weightings, or larger encoders may interact differently
 with observation spaces, and we have not tested whether the image advantage
 survives these variations.
-Each mode is trained with a modest, fixed number of seeds ($n=5$); we
+Each mode is trained with a modest, fixed number of seeds ($n=5$). We
 report bootstrap confidence intervals on every mean (Table~\ref{tab:results},
-Appendix~\ref{app:bootstrap}), but the conclusions would be strengthened by more
-seeds. The image advantage is specific to training on a narrow layout
-(Section~\ref{sec:reverse}); we test only two layouts, and a wider family of
+Appendix~\ref{app:bootstrap}), but more seeds would strengthen the conclusions.
+The image advantage is specific to training on a narrow layout
+(Section~\ref{sec:reverse}). We test only two layouts, and a wider family of
 train/test distributions would show where between these two extremes it appears.
 The model's rules and parameters (growth, secretion, chemotaxis, and
 polarisation rates) are chosen to be biologically plausible and to reproduce the
-qualitative immunosuppression loop of Section~\ref{sec:model}, but they are
-\emph{illustrative rather than fit to a specific tumour or dataset}; we make no
+qualitative immunosuppression loop of Section~\ref{sec:model}. They are
+\emph{illustrative and not fit to a specific tumour or dataset}. We make no
 quantitative claim about a real cancer, and we have not performed a sensitivity
-analysis over these parameters. Grounding the rules in measured rates and
-checking robustness of the observation-space conclusion to that grounding is
-important future work --- and is exactly the kind of study \physigym{} is meant to
-make routine, since the calibration lives in the \physicell{} configuration rather
-than in the RL code. Complex biological models and/or 3D models are left to future
-work.
+analysis over these parameters. Grounding the rules in measured rates, and
+verifying that the observation-space conclusion survives this grounding, is
+important future work. \physigym{} is designed to make such studies routine,
+since the calibration resides in the \physicell{} configuration and not in the
+RL code. Complex biological models and 3D models are left to future work.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Conclusion}
@@ -778,19 +752,18 @@ We presented \physigym{}, an open-source framework that bridges the
 \physicell{} ABM with Gymnasium RL, enabling direct policy learning in
 spatially explicit biological simulations.
 Using a TME model with an indirect drug mechanism, we showed that spatially
-explicit image observations are the critical state representation for
-\emph{generalization}: training on a structured rectangle layout and testing on
-a held-out network-field, image modes retain ${\approx}{+}32$ to $+33$ test
-return while spatial-scalar summaries --- competitive during training --- collapse
-to ${\approx}0$ out of distribution, and a macrophage-count-only POMDP baseline
-fails to learn at all.
-The gap is a generalization phenomenon, and it depends on the training
-distribution: with the layouts swapped, scalar summaries generalize as well as
-images. Spatially explicit observations are therefore a safeguard against
-overfitting a narrow training distribution, not a universal improvement.
-\physigym{} provides the infrastructure to study such questions in a
-principled, reproducible manner, and we anticipate it will serve as a
-testbed for both computational biology and RL communities.
+explicit image observations are decisive for \emph{generalization}. With
+training on a structured rectangle layout and testing on a held-out
+network-field, image modes retain ${\approx}{+}32$ to $+33$ test return, while
+spatial-scalar summaries, competitive during training, fall to ${\approx}0$ out
+of distribution, and a macrophage-count-only POMDP baseline does not learn.
+The gap concerns generalization and depends on the training distribution: with
+the layouts swapped, scalar summaries generalize as well as images. Spatially
+explicit observations therefore protect against overfitting a narrow training
+distribution.
+\physigym{} provides the infrastructure to study such questions reproducibly,
+and we expect it to serve as a testbed for the computational biology and RL
+communities.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \begin{ack}
@@ -835,7 +808,6 @@ training rectangle.
 
 \begin{figure}[htbp]
     \centering
-    % Adjust the width as needed (e.g., 0.8\linewidth, or a specific size like 8cm)
     \includegraphics[width=\linewidth]{img/ic_distributions}
     \caption{Representative examples of the training (rectangle) and held-out test (network-field) spatial layouts.}
     \label{fig:ic_distributions}
@@ -846,14 +818,14 @@ training rectangle.
 \section{Training algorithm and setup}
 \label{sec:training}
 
-To address our control objective --- maximizing cancer-cell eradication while
-minimizing drug administration --- we employ Soft Actor-Critic
+For our control objective (maximal cancer-cell eradication with minimal drug
+administration) we use Soft Actor-Critic
 (SAC)~\citep{haarnoja2018soft}, a state-of-the-art RL algorithm for continuous
 control. SAC is well suited to our setting due to its high sample efficiency,
 and as a deep RL method it accommodates different observation types, such as
 image-based representations, through Convolutional Neural Networks
-(CNNs)~\citep{o2015introduction}. A key challenge is the computational cost of
-the simulator; to alleviate this bottleneck we adopt an asynchronous parallel
+(CNNs)~\citep{o2015introduction}. The simulator dominates the computational
+cost, and we therefore adopt an asynchronous parallel
 training framework~\citep{mnih2016asynchronous, liu2025asynchronous}.
 A GPU-resident learner updates policy and value networks asynchronously while
 $13$ CPU-resident environment processes generate experience in parallel.
@@ -866,24 +838,24 @@ on a single workstation (one NVIDIA GeForce RTX 4090 GPU-resident learner with
 $13$ CPU-resident environment workers on an Intel Core i9-13900K, 32 logical
 cores). The asynchronous design decouples the GPU learner from the
 comparatively slow \physicell{} simulator, so throughput is limited by the CPU
-environment workers rather than by gradient updates; this is what makes the
-full observation-space sweep (nine modes, $5$ seeds each) tractable on a
-single machine.
+environment workers and not by gradient updates. This makes the full
+observation-space sweep (nine modes, $5$ seeds each) tractable on a single
+machine.
 
 \paragraph{Bridge overhead and throughput.}
-To characterise the cost of the \physigym{} bridge itself we time a single
+To characterise the cost of the \physigym{} bridge, we time a single
 environment's \texttt{step()} in isolation (median over $60$ steps after warm-up,
-one worker, on the workstation above); each \texttt{step()} runs the C++
+one worker, on the workstation above). Each \texttt{step()} runs the C++
 \physicell{} simulator step and the Python observation read-back that the bridge
-adds on top (Table~\ref{tab:throughput}). A single environment sustains
-${\approx}12$--$13$ steps/s. Crucially, switching from the scalar POMDP
-observation to a full nine-channel image observation raises the per-step time by
-only ${\approx}13\%$ ($76.9\!\to\!86.3$\,ms), and the cell-only image is
-indistinguishable from the scalar mode: the observation read-back is a small
-fraction of the step, which is dominated by the simulator itself. This is why the
-choice of observation space (Section~\ref{sec:obs}) barely affects wall-clock, and
-why aggregate throughput scales with the number of parallel CPU workers rather
-than with observation richness --- the $13$-worker configuration reaches on the
+adds (Table~\ref{tab:throughput}). A single environment sustains
+${\approx}12$--$13$ steps/s. Switching from the scalar POMDP observation to a
+full nine-channel image observation raises the per-step time by only
+${\approx}13\%$ ($76.9\!\to\!86.3$\,ms), and the cell-only image is
+indistinguishable from the scalar mode. The observation read-back is a small
+fraction of the step, which the simulator dominates. The choice of observation
+space (Section~\ref{sec:obs}) therefore has little effect on wall-clock time,
+and aggregate throughput scales with the number of parallel CPU workers, not
+with observation richness. The $13$-worker configuration reaches on the
 order of ${\approx}150$\,steps/s of aggregate experience, so the
 $6\!\times\!10^5$-step budget plus learner updates completes in the
 $3$--$5$\,h per run reported above.
@@ -912,17 +884,17 @@ steps (\emph{action repeat} of $6$) before the next decision. This serves two
 purposes. First, it stabilises learning: with a $15$-minute decision interval on
 a slow, indirect biological process (drug injection $\to$ macrophage
 repolarisation $\to$ gradient shift $\to$ T-cell migration $\to$ tumor death),
-consecutive raw simulator steps are highly correlated and a fresh decision at
+consecutive raw simulator steps are highly correlated, and a fresh decision at
 every step injects high-frequency jitter into the drug field without changing
-the underlying dynamics; committing to an action for several steps lets its
-effect materialise before it is revised, which empirically yields smoother dose
+the underlying dynamics. Holding an action for several steps lets its effect
+appear before it is revised, which in practice yields smoother dose
 trajectories and lower-variance value targets. Second, it improves simulator
 throughput per decision: the $10^5$ agent decisions per run correspond to
 $6\!\times\!10^5$ simulator steps of experience, so the effective interaction
 budget (and all step axes in Figures~\ref{fig:train_curves}--\ref{fig:test_curves})
 is $6\!\times\!10^5$. Action repeat is a standard device for temporally extended
-control and is well motivated here by the slow timescale of the controlled
-process relative to the simulator step. The specific value AR$=6$ is selected by
+control and suits the slow timescale of the controlled process relative to the
+simulator step. The value AR$=6$ is selected by
 a sensitivity sweep over AR$\in\{1,\dots,8\}$
 (Appendix~\ref{app:actionrepeat}, Figure~\ref{fig:action_repeat}): the
 action-smoothness cost drops steeply and plateaus by AR${\approx}6$, and the
@@ -959,12 +931,12 @@ the smallest repeat that attains both.
 
 \subsection{Neural Architecture}
 
-\textbf{Scalar modes} utilize a Multi-Layer Perceptron (MLP):
+\textbf{Scalar modes} use a Multi-Layer Perceptron (MLP):
 \[
 \mathrm{FC}(256) \xrightarrow{\text{Mish}} \mathrm{FC}(256)
 \]
 
-\textbf{Image modes} utilize an IMPALA-style CNN~\citep{espeholt2018impala}. The feature extraction and projection pipeline is defined as:
+\textbf{Image modes} use an IMPALA-style CNN~\citep{espeholt2018impala}. The feature extraction and projection pipeline is defined as:
 \begin{align*}
     &\mathrm{Conv}(n_c \to 32,\, k{=}8{\times}8,\, s{=}4) \xrightarrow{\text{Mish}} \\
     &\mathrm{Conv}(32 \to 64,\, k{=}4{\times}4,\, s{=}2) \xrightarrow{\text{Mish}} \\
@@ -1029,19 +1001,17 @@ objective combining tumor reduction, dose, and smoothness
 (Figure~\ref{fig:action_repeat}).
 
 Two effects drive the choice. (i)~\emph{Smoothness}: the action-smoothness cost
-falls steeply and monotonically with action repeat --- from ${\approx}110$ at
-AR$=1$ to ${\approx}17$ at AR$=6$ --- and then flattens, so most of the
+falls steeply and monotonically with action repeat, from ${\approx}110$ at
+AR$=1$ to ${\approx}17$ at AR$=6$, and then flattens, so most of the
 stabilisation benefit is already captured by AR$=6$ and larger values add little.
 This matches the physical timescale of the task: with a $15$-minute decision
 interval on a slow immune process, re-deciding every simulator step injects
 high-frequency drug-field jitter that does not change the underlying dynamics.
 (ii)~\emph{Composite objective}: the objective is worst at AR$=1$
 ($-0.88$) and rises to a plateau over AR$=5$--$8$, with AR$=6$ at
-$-0.07$; within that plateau the values are within each other's confidence
-intervals, so AR$=6$ is chosen as the smallest repeat that reaches the
-objective plateau while sitting at the knee of the smoothness curve. This makes
-action repeat a deliberate, evidence-backed choice rather than an incidental
-hyperparameter.
+$-0.07$. Within that plateau the values lie within each other's confidence
+intervals, and AR$=6$ is chosen as the smallest repeat that reaches the
+objective plateau while sitting at the knee of the smoothness curve.
 
 \begin{figure}[h]
   \centering
@@ -1049,10 +1019,10 @@ hyperparameter.
   \caption{Action-repeat sensitivity sweep (independent of the observation-space
     experiments; error bars are $95\%$ bootstrap CIs).
     \textbf{Left:} tumor reduction (more negative = more cells removed).
-    \textbf{Centre:} action-smoothness cost --- drops sharply and plateaus by
+    \textbf{Centre:} action-smoothness cost, which drops sharply and plateaus by
     AR${\approx}6$.
-    \textbf{Right:} composite objective (higher is better) --- rises to a plateau
-    over AR$=5$--$8$; AR$=6$ (dashed) is the smallest repeat on that plateau and
+    \textbf{Right:} composite objective (higher is better), which rises to a
+    plateau over AR$=5$--$8$. AR$=6$ (dashed) is the smallest repeat on that plateau and
     at the knee of the smoothness curve.}
   \label{fig:action_repeat}
 \end{figure}
@@ -1110,18 +1080,17 @@ confidence interval on the mean (Table~\ref{tab:bootstrap}). The same procedure
 applied per step yields the shaded bands in
 Figures~\ref{fig:train_ci} and~\ref{fig:test_ci}.
 
-The bootstrap intervals sharpen the main-text claims. On the held-out
+The bootstrap intervals support the main-text claims. On the held-out
 network-field, the three image modes have test-return CIs that lie entirely
 above $+23$, whereas every spatial-scalar mode has a test-return CI that
 \emph{contains zero} (e.g.\ S3s $[-6.2,+9.1]$), so their generalization is not
 statistically distinguishable from a non-learning policy. The image and
-spatial-scalar CIs do not overlap, confirming that the generalization gap is
-significant and not an artefact of seed selection. The \texttt{scalars\_macrophages}
-POMDP baseline has a tight, strongly negative CI $[-33.4,-29.4]$, reflecting
-consistent failure rather than robustness --- and it does not overlap the random
-policy's test CI $[-28.2,-22.8]$ from the favourable side, so the
-macrophage-only observation performs \emph{no better than, and plausibly worse
-than, random dosing}.
+spatial-scalar CIs do not overlap, so the generalization gap is significant and
+cannot be attributed to seed selection. The \texttt{scalars\_macrophages}
+POMDP baseline has a tight, strongly negative CI $[-33.4,-29.4]$, which reflects
+a consistent failure. It lies entirely below the random policy's test CI
+$[-28.2,-22.8]$, so the macrophage-only observation performs \emph{no better
+than, and plausibly worse than, random dosing}.
 
 \begin{table}[h]
   \caption{Mean end-of-training return with a $95\%$ bootstrap confidence
@@ -1184,10 +1153,10 @@ returns ($n=5$ per mode) and introduce no new runs.
 Pooling the three image modes' per-seed test returns ($n=15$, mean $+32.8$)
 against the four spatial-scalar modes' ($n=20$, mean $+3.7$), a one-sided
 Mann--Whitney $U$-test gives $U=296$, $p=6.2\times10^{-7}$, and Cliff's
-$\delta=+0.97$ --- near-complete rank separation between the families. This is the
+$\delta=+0.97$, i.e.\ near-complete rank separation between the families. This is the
 formal counterpart to the disjoint CIs in Table~\ref{tab:bootstrap}.
 
-\paragraph{M1/M2-split ablation (equivalence, not just non-significance).}
+\paragraph{M1/M2-split ablation and equivalence test.}
 For the two nested pairs we report both the difference-of-means test and a
 two-one-sided-tests (TOST) equivalence test against a margin of $\pm10$
 (${\approx}1\sigma$ of a single mode's seed spread). I1 vs.\ I1m:
@@ -1213,23 +1182,23 @@ which reads the same cached per-seed curves as the tables and figures.
 
 Figure~\ref{fig:episode} shows a single matched test episode comparing an image
 mode (\Itwo{}), a spatial-scalar mode (\Sthree{}), and the POMDP baseline
-(\Sone{}) step by step. To guarantee an exact comparison, all three agents are
-rolled out (deterministically, using the policy mean action) from the
-\emph{identical} held-out network-field initial condition --- the same
-$124$-tumor-cell layout replayed from file --- so the only difference between the
-three trajectories is the observation mode.
+(\Sone{}) step by step. For an exact comparison, all three agents are rolled
+out (deterministically, using the policy mean action) from the
+\emph{identical} held-out network-field initial condition, the same
+$124$-tumor-cell layout replayed from file. The observation mode is therefore
+the only difference between the three trajectories.
 
-The episode cleanly separates the three regimes. \Itwo{} drives the tumor to
-near-eradication ($3$ cells remaining, $+223$ cumulative return); it spends the
-most drug ($4.5$ total dose) but places it precisely enough --- visibly dosing in
-sustained, targeted bursts (Figure~\ref{fig:episode}, bottom) --- to convert dose
-into effective macrophage repolarisation and tumor clearance. \Sthree{} achieves
-partial control ($70$ cells, $+30$ return, $2.8$ dose): it suppresses growth
-early but plateaus and cannot finish, lacking the spatial substrate feedback
-needed to target the final push. \Sone{} (POMDP) barely acts ($0.9$ total dose)
-and the tumor \emph{grows} past its starting size ($130$ cells, $-6.4$ return):
-seeing only macrophage-polarisation counts, it cannot localise where to inject,
-so it under-doses and fails --- consistent with its aggregate performance at or
+The three regimes separate clearly in this episode. \Itwo{} drives the tumor to
+near-eradication ($3$ cells remaining, $+223$ cumulative return). It spends the
+most drug ($4.5$ total dose), but places it precisely enough to convert dose
+into macrophage repolarisation and tumor clearance, with sustained, targeted
+bursts of dosing (Figure~\ref{fig:episode}, bottom). \Sthree{} achieves
+partial control ($70$ cells, $+30$ return, $2.8$ dose). It suppresses growth
+early but then plateaus, because it lacks the spatial substrate feedback needed
+to target the final phase. \Sone{} (POMDP) barely acts ($0.9$ total dose)
+and the tumor \emph{grows} past its starting size ($130$ cells, $-6.4$ return).
+Seeing only macrophage-polarisation counts, it cannot localise where to inject,
+so it under-doses and fails, consistent with its aggregate performance at or
 below the random baseline.
 
 \begin{figure}[h]
@@ -1237,9 +1206,9 @@ below the random baseline.
   \includegraphics[width=0.85\linewidth]{img/fig_episode_comparison.pdf}
   \caption{\textbf{Matched network-field episode (identical initial condition,
     $124$ tumor cells).} Cumulative reward (top), tumor cell count (middle),
-    and the dose action (bottom, rolling mean over $6$ steps --- matching the
-    action-repeat horizon used in training; the raw per-step signal is noisy
-    and unreadable at full resolution) for \Itwo{} (red), \Sthree{} (blue),
+    and the dose action (bottom, rolling mean over $6$ steps, which matches the
+    action-repeat horizon used in training, because the raw per-step signal is
+    noisy and unreadable at full resolution) for \Itwo{} (red), \Sthree{} (blue),
     and the \Sone{} POMDP baseline (grey), all replayed from the same IC.
     \Itwo{} reaches near-eradication ($3$ cells, $+223$ return, $4.5$ dose);
     \Sthree{} achieves partial control ($70$ cells, $+30$ return, $2.8$ dose);
