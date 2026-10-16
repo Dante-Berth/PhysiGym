@@ -7,8 +7,10 @@ needs no checkpoint: both sweeps logged returns, and returns are the whole
 question.
 
     targeted   SAC_ASYNC_TME_NEW_HYP_REWARD{,_TRAIN_NETWORKFIELD_TEST_RECTANGLE}
-    full       ..._TRAIN_RECTANGLE_TEST_NETWORKFIELD_NEW_CHEMO
-               ..._TRAIN_NETWORK_FIELD_TEST_RECTANGLE_full
+    full       SAC_ASYNC_TME_NEW_HYP_REWARD_FULL_OLDMODEL
+               ..._TRAIN_NETWORKFIELD_TEST_RECTANGLE_FULL_OLDMODEL
+               (2026-10, pre-chemotaxis model, S1/S3m/I2 only; replaces the
+               new-model sweeps wandb_full_*, which are kept on disk)
 
 ⚠️ The `full` projects are NOT returned by ``wandb.Api().projects()`` -- see
 RESEARCH_LOG T1 and download_wandb_project_full.py.  They were presumed not to
@@ -66,11 +68,11 @@ SWEEPS = {
         dir="wandb_train_rectangle_test_networkfield",
         restrict="wandb_tme_new/manifest.csv"),
     ("rect2net", "full"): dict(
-        dir="wandb_full_train_rectangle_test_networkfield", restrict=None),
+        dir="wandb_oldmodel_full_train_rectangle_test_networkfield", restrict=None),
     ("net2rect", "targeted"): dict(
         dir="wandb_train_networkfield_test_rectangle", restrict=None),
     ("net2rect", "full"): dict(
-        dir="wandb_full_train_networkfield_test_rectangle", restrict=None),
+        dir="wandb_oldmodel_full_train_networkfield_test_rectangle", restrict=None),
 }
 
 DIRECTION_META = {
@@ -125,48 +127,53 @@ def seed_matrix(direction, action_mode, mode, col, grid):
     return np.array(rows) if rows else np.empty((0, len(grid)))
 
 
+ABLATION_MODES = ["scalars_macrophages",
+                  "spatial_scalars_cells_m1m2", "img_mc_cells_substrates"]
+
+
 def draw(fname="action_mode_ablation"):
+    """2 x 4: rows = direction; columns = targeted (train, test), uniform (train, test)."""
     _style()
-    fig, axes = plt.subplots(2, 2, figsize=(11.0, 7.2), sharex=True, sharey="all")
+    fig, axes = plt.subplots(2, 4, figsize=(14.0, 7.2), sharex=True, sharey="row")
+    YLIM = {"rect2net": (-165, 75), "net2rect": (-85, 85)}
     grid = np.linspace(0, STEP_MAX, NGRID)
     x = grid * ACTION_REPEAT / 1e5
 
     for r, direction in enumerate(DIRECTION_META):
         cfg = DIRECTION_META[direction]
-        for c, col in enumerate(["train_return", "test_return"]):
-            ax = axes[r, c]
-            for action_mode in ("targeted", "full"):
-                st = ACTION_STYLE[action_mode]
-                for mode in MODE_ORDER:
-                    mat = seed_matrix(direction, action_mode, mode, col, grid)
-                    if mat.size == 0:
-                        continue
-                    m = MODE_META[mode]
-                    mean, lo, hi, _ = bootstrap_band(mat)
-                    ax.plot(x, mean, color=m["color"], ls=st["ls"], lw=st["lw"],
-                            alpha=st["alpha"], zorder=m["z"], label=m["id"])
-                    ax.fill_between(x, lo, hi, color=m["color"], alpha=0.10,
-                                    zorder=m["z"] - 0.5, linewidth=0)
+        for ci, (action_mode, col) in enumerate(
+                [(a, c) for a in ("targeted", "full")
+                 for c in ("train_return", "test_return")]):
+            ax = axes[r, ci]
+            st = ACTION_STYLE[action_mode]
+            for mode in ABLATION_MODES:
+                mat = seed_matrix(direction, action_mode, mode, col, grid)
+                if mat.size == 0:
+                    continue
+                m = MODE_META[mode]
+                mean, lo, hi, _ = bootstrap_band(mat)
+                ax.plot(x, mean, color=m["color"], ls="-", lw=1.7,
+                        zorder=m["z"], label=m["id"])
+                ax.fill_between(x, lo, hi, color=m["color"], alpha=0.12,
+                                zorder=m["z"] - 0.5, linewidth=0)
             ax.axhline(0, color="k", lw=0.6, alpha=0.35, zorder=0)
-            ax.set_title(cfg["train"] if c == 0 else cfg["test"], pad=4)
-            if c == 0:
+            ax.set_ylim(*YLIM[direction])
+            name = "uniform" if action_mode == "full" else "targeted"
+            split = cfg["train"] if col == "train_return" else cfg["test"]
+            ax.set_title(f"{name}: {split}", pad=4, fontsize=9.5)
+            if ci == 0:
                 ax.set_ylabel("cumulative return")
-                ax.text(-0.20, 0.5, cfg["row"], transform=ax.transAxes,
+                ax.text(-0.30, 0.5, cfg["row"], transform=ax.transAxes,
                         rotation=90, va="center", ha="center", fontsize=10.5,
                         fontweight="bold")
             if r == 1:
-                ax.set_xlabel(r"cumulative simulator steps ($\times 10^{5}$)")
+                ax.set_xlabel(r"simulator steps ($\times 10^{5}$)")
 
     mode_h = [Line2D([], [], color=MODE_META[m]["color"], ls="-", lw=1.7,
-                     label=MODE_META[m]["id"]) for m in MODE_ORDER]
-    act_h = [Line2D([], [], color="0.25", ls=ACTION_STYLE[a]["ls"],
-                    lw=ACTION_STYLE[a]["lw"],
-                    label=f"{'uniform' if a == 'full' else a} action space")
-             for a in ("targeted", "full")]
-    fig.legend(handles=mode_h + act_h, loc="lower center", ncol=12, frameon=False,
-               bbox_to_anchor=(0.5, -0.045), fontsize=9.0, columnspacing=1.3,
-               handlelength=2.4)
-    fig.tight_layout(rect=(0.015, 0.025, 1, 1))
+                     label=MODE_META[m]["id"]) for m in ABLATION_MODES]
+    fig.legend(handles=mode_h, loc="lower center", ncol=4, frameon=False,
+               bbox_to_anchor=(0.5, -0.03), fontsize=9.5)
+    fig.tight_layout(rect=(0.02, 0.03, 1, 1))
     for ext in ("pdf", "png"):
         fig.savefig(os.path.join(OUT, f"{fname}.{ext}"))
     plt.close(fig)
@@ -202,63 +209,65 @@ def endpoints():
 
 
 def collapse(fname="action_mode_collapse"):
-    """Per-mode dot plot: final return, and mean per-step action change.
+    """Slope chart: final training return, targeted -> uniform, one line per mode.
 
-    The learning-curve figure shows the full-action curves lying on top of one
-    another, which is easy to mistake for overplotting.  This shows the spread
-    as a number per mode.  The right panel is the mechanism: `action_delta_mean`
-    is the mean absolute change in the action between consecutive decisions, so
-    a policy that has stopped responding to its observation reports a small,
-    mode-independent value.
-
-    ⚠️ The two action spaces have different dimension (targeted 4-D, full 1-D),
-    so the delta panel is NOT a like-for-like magnitude comparison and no claim
-    is made about which number is "larger".  What is comparable, and what the
-    panel is for, is the SPREAD ACROSS MODES within one action space.
+    One panel per transfer direction.  Each mode is a line from its targeted
+    endpoint to its uniform endpoint, mean over seeds with a 95% bootstrap CI
+    (B = 10,000 seed resamples) and the individual seeds as small dots.  Identity
+    is carried by colour, marker shape and a direct label, never colour alone.
+    Replaces the 2026-10-16 dot plot, which put two action spaces and an
+    action-step panel on one axis and was hard to read.
     """
     _style()
-    modes = [m for m in MODE_ORDER if m != "random_baseline"]
-    fig, axes = plt.subplots(1, 2, figsize=(10.6, 4.4))
-    y = np.arange(len(modes))[::-1]
-
-    for ax, (col, tail, lab) in zip(axes, [
-            ("train_return", 50, "final training return"),
-            ("train_action_delta_mean", 50, r"mean action step $|\Delta a|$")]):
-        for action_mode, mk in (("targeted", "o"), ("full", "s")):
-            xs = []
-            for mode in modes:
+    rng = np.random.default_rng(0)
+    modes = [m for m in ABLATION_MODES if m != "random_baseline"]
+    label = {"scalars_macrophages": "S1 (blind)",
+             "spatial_scalars_cells_m1m2": "S3m (spatial scalars)",
+             "img_mc_cells_substrates": "I2 (image)"}
+    marker = {"scalars_macrophages": "o", "spatial_scalars_cells_m1m2": "s",
+              "img_mc_cells_substrates": "D"}
+    ink = {"scalars_macrophages": "#5c677d", "spatial_scalars_cells_m1m2": "#0077b6",
+           "img_mc_cells_substrates": "#c1121f"}
+    fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.3), sharey=True)
+    for ax, direction in zip(axes, DIRECTION_META):
+        ends = {}
+        for mode in modes:
+            mu, lo, hi, pts = [], [], [], []
+            for action_mode in ("targeted", "full"):
                 v = []
-                for f in seed_files("rect2net", action_mode, mode):
-                    d = pd.read_csv(f, usecols=["step", col]).dropna().sort_values("step")
+                for f in seed_files(direction, action_mode, mode):
+                    d = pd.read_csv(f, usecols=["step", "train_return"]).dropna().sort_values("step")
                     if len(d) > 3:
-                        v.append(_ewma(d[col].to_numpy())[-tail:].mean())
-                xs.append(np.mean(v) if v else np.nan)
-            xs = np.array(xs)
-            ax.plot(xs, y, mk, ms=6, ls="none",
-                    mfc="none" if action_mode == "full" else None,
-                    color="#1d3557" if action_mode == "targeted" else "#e63946",
-                    label="targeted" if action_mode == "targeted" else "uniform")
-            ok = ~np.isnan(xs)
-            if ok.sum() > 1:
-                ax.annotate("", xy=(xs[ok].min(), -0.72), xytext=(xs[ok].max(), -0.72),
-                            arrowprops=dict(arrowstyle="<->", lw=1.0,
-                                            color="#1d3557" if action_mode == "targeted" else "#e63946"))
-                ax.text((xs[ok].min() + xs[ok].max()) / 2, -1.15,
-                        f"spread {xs[ok].max() - xs[ok].min():.3g}", ha="center",
-                        fontsize=8.5,
-                        color="#1d3557" if action_mode == "targeted" else "#e63946")
-        ax.set_yticks(y)
-        ax.set_yticklabels([MODE_META[m]["id"] for m in modes])
-        ax.set_ylim(-1.9, len(modes) - 0.4)
-        ax.set_xlabel(lab)
-        ax.grid(axis="x", alpha=0.22)
-        ax.grid(axis="y", visible=False)
-    h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, frameon=False, ncol=2, loc="lower center",
-               bbox_to_anchor=(0.5, -0.06), fontsize=9)
-    fig.suptitle("rectangle $\\rightarrow$ network-field: modes separate under targeted "
-                 "action, collapse under uniform", fontsize=10.5, y=1.0)
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
+                        v.append(_ewma(d["train_return"].to_numpy())[-50:].mean())
+                v = np.array(v)
+                boot = rng.choice(v, size=(10_000, len(v)), replace=True).mean(1)
+                mu.append(v.mean()); lo.append(np.percentile(boot, 2.5))
+                hi.append(np.percentile(boot, 97.5)); pts.append(v)
+            c = ink[mode]
+            xs = np.array([0.0, 1.0])
+            for xi, v in zip(xs, pts):
+                jit = (rng.random(len(v)) - 0.5) * 0.10
+                ax.scatter(xi + jit, v, s=12, color=c, alpha=0.30, lw=0, zorder=2)
+            ax.plot(xs, mu, color=c, lw=2.0, zorder=3)
+            ax.errorbar(xs, mu, yerr=[np.array(mu) - lo, np.array(hi) - mu], fmt=marker[mode],
+                        ms=8, color=c, mec="white", mew=1.2, elinewidth=1.4, capsize=3, zorder=4)
+            ends[mode] = mu[1]
+        # direct labels at the uniform end, nudged apart when they collide
+        order = sorted(modes, key=lambda m: ends[m])
+        ys, last = {}, -1e9
+        for m in order:
+            y = max(ends[m], last + 9.0); ys[m] = y; last = y
+        for m in modes:
+            ax.text(1.12, ys[m], label[m], color=ink[m], va="center", fontsize=9)
+        ax.axhline(0, color="k", lw=0.6, alpha=0.35, zorder=0)
+        ax.set_xticks([0, 1]); ax.set_xticklabels(["targeted\naction", "uniform\naction"])
+        ax.set_xlim(-0.25, 1.75)
+        ax.set_title(DIRECTION_META[direction]["row"], fontsize=10.5, pad=6)
+        ax.grid(axis="x", visible=False); ax.grid(axis="y", alpha=0.22)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+    axes[0].set_ylabel("final training return")
+    fig.tight_layout()
     for ext in ("pdf", "png"):
         fig.savefig(os.path.join(OUT, f"{fname}.{ext}"))
     plt.close(fig)
