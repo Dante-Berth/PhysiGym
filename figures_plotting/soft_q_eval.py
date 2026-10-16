@@ -105,7 +105,16 @@ def episode(env, actor, q1, q2, alpha, gamma, AR):
     Qd = qmin(dec_obs, dec_act); R = np.array(dec_R); lp = np.array(dec_logp)
     Gd = discounted(R, gamma)
     Gsoft = discounted(R, gamma, extra=-alpha * lp)
+    # Time-limit correction: episodes cut at the horizon (80 decisions) are not terminal, the critic
+    # never sees the elapsed time and bootstraps as if the episode went on.  Add the discounted
+    # continuation of the soft reward, estimated from the mean of the last 10 decisions.
+    T = len(R); truncated = T >= 80
+    tail = float(np.mean(R[-10:] - alpha * lp[-10:])) if truncated else 0.0
+    ext = np.array([gamma ** (T - k) for k in range(T)]) * tail / (1.0 - gamma)
+    Gsoft_ext = Gsoft + ext
     return dict(
+        b_dec_soft_ext=float(np.mean(Qd - Gsoft_ext)), ext_term=float(np.mean(ext)), tail_soft_reward=tail,
+        truncated=bool(truncated),
         T_sim=len(sim_r), T_dec=len(dec_R), alpha=alpha,
         b_logged=float(np.mean(Qs - Gs)), m_logged=float(np.mean(np.abs(Qs - Gs))),
         b_dec_plain=float(np.mean(Qd - Gd)), m_dec_plain=float(np.mean(np.abs(Qd - Gd))),
@@ -128,9 +137,10 @@ if __name__ == "__main__":
     tmp = os.path.join(a.out, "_tmp_" + a.tag)
     env, actor, q1, q2, alpha, cfg, ck = build(a.ckpt, a.ic_seed, tmp)
     gamma = float(cfg["rl"]["gamma"]); AR = int(cfg["rl"].get("action_repeat", 1))
-    rec = []
+    jpath = os.path.join(a.out, a.tag + ".json")
+    rec = json.load(open(jpath)) if os.path.exists(jpath) else []   # resume after a worker crash
     t0 = time.time()
-    for e in range(a.episodes):
+    for e in range(len(rec), a.episodes):
         r = episode(env, actor, q1, q2, alpha, gamma, AR)
         r.update(tag=a.tag, ckpt=os.path.basename(a.ckpt), episode=e, gamma=gamma, AR=AR,
                  grad_steps=int(ck.get("grad_steps", -1)), seconds=time.time() - t0)
